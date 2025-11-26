@@ -1,0 +1,120 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* App-level defaults */
+:root {
+  color-scheme: light dark;
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+}
+
+/* Ensure buttons are clickable and responsive */
+button {
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+
+/* Improve touch targets on mobile */
+@media (max-width: 640px) {
+  button {
+    min-height: 44px; /* iOS recommended touch target */
+  }
+}
+
+/* Remote cursor styles for Monaco Editor */
+.monaco-editor .remote-cursor {
+  border-left: 2px solid #3b82f6;
+  margin-left: -1px;
+  pointer-events: none;
+  position: absolute;
+  opacity: 0.9;
+}
+
+.monaco-editor .remote-cursor:hover {
+  opacity: 1;
+}
+
+/* Remote cursor glyph margin indicator */
+.monaco-editor .monaco-editor .margin {
+  position: relative;
+}
+
+.monaco-editor .remote-cursor-glyph {
+  position: absolute;
+  left: 0;
+  height: 100%;
+  pointer-events: none;
+}
+
+/* Ensure chat input is always accessible */
+#chat-input {
+  pointer-events: auto !important;
+  z-index: 100;
+  position: relative;
+}
+
+#chat-input:focus {
+  z-index: 101;
+}
+
+/* Prevent any overlay from blocking chat */
+form[class*="flex gap-2"] {
+  pointer-events: auto !important;
+  z-index: 10;
+  position: relative;
+}
+
+/* Toast animations */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slide-in-from-top {
+  from {
+    transform: translate(-50%, -20px);
+  }
+  to {
+    transform: translate(-50%, 0);
+  }
+}
+
+.animate-in {
+  animation: fade-in 0.3s ease-out, slide-in-from-top 0.3s ease-out;
+}
+
+.fade-in {
+  animation: fade-in 0.3s ease-out;
+}
+
+.slide-in-from-top-2 {
+  animation: slide-in-from-top 0.3s ease-out;
+}
+
+/* Flashcard flip animation */
+.perspective-1000 {
+  perspective: 1000px;
+}
+
+.transform-style-3d {
+  transform-style: preserve-3d;
+}
+
+.backface-hidden {
+  backface-visibility: hidden;
+}
+
+.rotate-y-180 {
+  transform: rotateY(180deg);
+}
