@@ -1,4 +1,4 @@
-## CodeTogether (UCR CS175 – Team 01)
+## CodeTogether
 
 Dev quickstart:
 
