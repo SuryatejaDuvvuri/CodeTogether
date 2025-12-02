@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { recordAnswer } from '../lib/stats.ts'
+import { playSuccess, playFail, playStreak } from '../lib/sounds.ts'
 
 type Flashcard = {
 	id: string
@@ -7,6 +8,8 @@ type Flashcard = {
 	back: string
 	category: string
 	difficulty?: 'easy' | 'medium' | 'hard'
+	choices?: string[] // For MCQ mode
+	correctIndex?: number // For MCQ mode
 }
 
 // Spaced repetition intervals (in days)
@@ -234,7 +237,28 @@ function getCardsDue(): Flashcard[] {
 	})
 }
 
+// Convert flashcards to MCQ format
+function createMCQCard(card: Flashcard): Flashcard {
+	// For demo, create simple MCQ from existing cards
+	const choices = [
+		card.back, // Correct answer
+		'A different answer that seems plausible',
+		'Another option that could be correct',
+		'An incorrect but related answer',
+	]
+	// Shuffle choices
+	const shuffled = [...choices].sort(() => Math.random() - 0.5)
+	const correctIndex = shuffled.indexOf(card.back)
+	
+	return {
+		...card,
+		choices: shuffled,
+		correctIndex,
+	}
+}
+
 function Flashcards() {
+	const [mode, setMode] = useState<'spaced' | 'mcq'>('spaced')
 	const [isFlipped, setIsFlipped] = useState(false)
 	const [currentIndex, setCurrentIndex] = useState(0)
 	const [cardsDue, setCardsDue] = useState<Flashcard[]>([])
@@ -242,13 +266,59 @@ function Flashcards() {
 	const [correctCount, setCorrectCount] = useState(0)
 	const [showStats, setShowStats] = useState(false)
 	const [sessionStartTime] = useState(Date.now())
+	const [mcqTimer, setMcqTimer] = useState(5)
+	const [streak, setStreak] = useState(0)
+	const [xp, setXp] = useState(0)
+	const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null)
+	const [showResult, setShowResult] = useState(false)
 	const progressRef = useRef<Map<string, CardProgress>>(getCardProgress())
+	const timerRef = useRef<number | null>(null)
 
 	// Load due cards
 	useEffect(() => {
-		const due = getCardsDue()
-		setCardsDue(due.length > 0 ? due : FLASHCARD_DECK.slice(0, 5)) // Fallback to first 5 if none due
-	}, [])
+		if (mode === 'spaced') {
+			const due = getCardsDue()
+			setCardsDue(due.length > 0 ? due : FLASHCARD_DECK.slice(0, 5)) // Fallback to first 5 if none due
+		} else {
+			// MCQ mode: convert first 10 cards to MCQ format
+			const mcqCards = FLASHCARD_DECK.slice(0, 10).map(createMCQCard)
+			setCardsDue(mcqCards)
+		}
+		setCurrentIndex(0)
+		setReviewedCount(0)
+		setCorrectCount(0)
+		setStreak(0)
+		setXp(0)
+		setIsFlipped(false)
+		setSelectedAnswer(null)
+		setShowResult(false)
+	}, [mode])
+
+	// MCQ Timer
+	useEffect(() => {
+		if (mode === 'mcq' && !showResult && currentCard) {
+			setMcqTimer(5)
+			setSelectedAnswer(null)
+			setShowResult(false)
+			
+			timerRef.current = window.setInterval(() => {
+				setMcqTimer((prev) => {
+					if (prev <= 1) {
+						// Time's up - mark as incorrect
+						handleMCQAnswer(-1)
+						return 0
+					}
+					return prev - 1
+				})
+			}, 1000)
+			
+			return () => {
+				if (timerRef.current) {
+					clearInterval(timerRef.current)
+				}
+			}
+		}
+	}, [mode, currentIndex, showResult])
 
 	const currentCard = cardsDue[currentIndex]
 	const progress = progressRef.current.get(currentCard?.id || '')
@@ -263,6 +333,50 @@ function Flashcards() {
 
 	const handleFlip = () => {
 		setIsFlipped(!isFlipped)
+	}
+
+	const handleMCQAnswer = async (selectedIndex: number) => {
+		if (!currentCard || showResult) return
+		
+		if (timerRef.current) {
+			clearInterval(timerRef.current)
+			timerRef.current = null
+		}
+		
+		const isCorrect = selectedIndex === currentCard.correctIndex
+		setSelectedAnswer(selectedIndex)
+		setShowResult(true)
+		
+		// Play sound
+		if (isCorrect) {
+			playSuccess()
+			setStreak((prev) => {
+				const newStreak = prev + 1
+				if (newStreak > 0 && newStreak % 3 === 0) {
+					playStreak()
+				}
+				return newStreak
+			})
+			setXp((prev) => prev + 2)
+			setCorrectCount((prev) => prev + 1)
+		} else {
+			playFail()
+			setStreak(0)
+		}
+		
+		await recordAnswer(isCorrect, streak)
+		setReviewedCount((prev) => prev + 1)
+		
+		// Auto-advance after 1.5 seconds
+		setTimeout(() => {
+			if (currentIndex < cardsDue.length - 1) {
+				setCurrentIndex((prev) => prev + 1)
+				setShowResult(false)
+				setSelectedAnswer(null)
+			} else {
+				setShowStats(true)
+			}
+		}, 1500)
 	}
 
 	const handleRating = async (quality: number) => {
@@ -376,10 +490,22 @@ function Flashcards() {
 				<div>
 					<h1 className="text-3xl font-bold mb-1">Flashcards</h1>
 					<p className="text-sm text-neutral-600 dark:text-neutral-400">
-						Spaced repetition learning system
+						{mode === 'spaced' ? 'Spaced repetition learning system' : 'MCQ Speedrun Mode - 5 seconds per question'}
 					</p>
 				</div>
-				<div className="text-right">
+				<div className="text-right space-y-2">
+					<div className="flex items-center gap-3">
+						{mode === 'mcq' && streak > 0 && (
+							<span className="px-3 py-1 bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 rounded-full text-xs font-semibold">
+								🔥 Streak: {streak}
+							</span>
+						)}
+						{mode === 'mcq' && (
+							<span className="px-3 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded-full text-xs font-semibold">
+								⭐ XP: {xp}
+							</span>
+						)}
+					</div>
 					<div className="text-sm font-semibold text-neutral-700 dark:text-neutral-300">
 						Card {currentIndex + 1} / {cardsDue.length}
 					</div>
@@ -387,6 +513,32 @@ function Flashcards() {
 						{reviewedCount} reviewed • {correctCount} correct
 					</div>
 				</div>
+			</div>
+
+			{/* Mode Toggle */}
+			<div className="flex gap-2 p-1 bg-neutral-100 dark:bg-neutral-800 rounded-lg">
+				<button
+					type="button"
+					onClick={() => setMode('spaced')}
+					className={`flex-1 px-4 py-2 rounded-md text-sm font-semibold transition-all ${
+						mode === 'spaced'
+							? 'bg-white dark:bg-neutral-700 text-blue-600 dark:text-blue-400 shadow-sm'
+							: 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200'
+					}`}
+				>
+					📚 Spaced Repetition
+				</button>
+				<button
+					type="button"
+					onClick={() => setMode('mcq')}
+					className={`flex-1 px-4 py-2 rounded-md text-sm font-semibold transition-all ${
+						mode === 'mcq'
+							? 'bg-white dark:bg-neutral-700 text-blue-600 dark:text-blue-400 shadow-sm'
+							: 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200'
+					}`}
+				>
+					⚡ MCQ Speedrun (5s)
+				</button>
 			</div>
 
 			{/* Progress Bar */}
@@ -403,11 +555,81 @@ function Flashcards() {
 				</div>
 			</div>
 
-			{/* Flashcard */}
-			<div
-				className="relative h-80 perspective-1000 mb-6"
-				style={{ perspective: '1000px', minHeight: '320px' }}
-			>
+			{/* MCQ Mode */}
+			{mode === 'mcq' && currentCard.choices ? (
+				<div className="space-y-6">
+					{/* Timer */}
+					<div className="flex items-center justify-center">
+						<div className={`text-4xl font-bold font-mono ${
+							mcqTimer <= 2 ? 'text-red-600 dark:text-red-400 animate-pulse' : 'text-blue-600 dark:text-blue-400'
+						}`}>
+							{mcqTimer}s
+						</div>
+					</div>
+					
+					{/* Question */}
+					<div className="border-2 border-blue-200 dark:border-blue-800 rounded-xl p-8 bg-blue-50 dark:bg-blue-900/20 shadow-lg">
+						<div className="text-center space-y-4">
+							<div className="text-xs text-blue-600 dark:text-blue-400 uppercase tracking-wide font-medium">
+								{currentCard.category}
+							</div>
+							<div className="text-2xl font-semibold text-neutral-900 dark:text-neutral-100 leading-relaxed">
+								{currentCard.front}
+							</div>
+						</div>
+					</div>
+					
+					{/* Choices */}
+					<div className="grid grid-cols-1 gap-3">
+						{currentCard.choices.map((choice, index) => {
+							const isSelected = selectedAnswer === index
+							const isCorrect = index === currentCard.correctIndex
+							const showCorrect = showResult && isCorrect
+							const showIncorrect = showResult && isSelected && !isCorrect
+							
+							return (
+								<button
+									key={index}
+									type="button"
+									onClick={() => !showResult && handleMCQAnswer(index)}
+									disabled={showResult}
+									className={`p-4 rounded-lg text-left font-medium transition-all ${
+										showCorrect
+											? 'bg-green-100 dark:bg-green-900/30 border-2 border-green-500 text-green-900 dark:text-green-100'
+											: showIncorrect
+											? 'bg-red-100 dark:bg-red-900/30 border-2 border-red-500 text-red-900 dark:text-red-100'
+											: isSelected
+											? 'bg-blue-100 dark:bg-blue-900/30 border-2 border-blue-500 text-blue-900 dark:text-blue-100'
+											: 'bg-white dark:bg-neutral-800 border-2 border-neutral-300 dark:border-neutral-600 text-neutral-900 dark:text-neutral-100 hover:border-blue-400 dark:hover:border-blue-600'
+									} ${!showResult ? 'cursor-pointer active:scale-95' : 'cursor-not-allowed'}`}
+								>
+									<div className="flex items-center gap-3">
+										<span className={`w-8 h-8 rounded-full flex items-center justify-center font-bold ${
+											showCorrect
+												? 'bg-green-500 text-white'
+												: showIncorrect
+												? 'bg-red-500 text-white'
+												: isSelected
+												? 'bg-blue-500 text-white'
+												: 'bg-neutral-200 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-300'
+										}`}>
+											{String.fromCharCode(65 + index)}
+										</span>
+										<span>{choice}</span>
+										{showCorrect && <span className="ml-auto text-green-600 dark:text-green-400">✓</span>}
+										{showIncorrect && <span className="ml-auto text-red-600 dark:text-red-400">✗</span>}
+									</div>
+								</button>
+							)
+						})}
+					</div>
+				</div>
+			) : (
+				/* Spaced Repetition Mode */
+				<div
+					className="relative h-80 perspective-1000 mb-6"
+					style={{ perspective: '1000px', minHeight: '320px' }}
+				>
 				<div
 					className={`absolute inset-0 w-full h-full transition-transform duration-500 transform-style-3d ${
 						isFlipped ? 'rotate-y-180' : ''
@@ -459,11 +681,13 @@ function Flashcards() {
 						</div>
 					</div>
 				</div>
-			</div>
+				</div>
+			)}
 
-			{/* Action Buttons */}
-			<div className="space-y-4">
-				{!isFlipped ? (
+			{/* Action Buttons - Only for Spaced Repetition */}
+			{mode === 'spaced' && (
+				<div className="space-y-4">
+					{!isFlipped ? (
 					<div className="text-center">
 						<button
 							type="button"
@@ -510,7 +734,8 @@ function Flashcards() {
 						</div>
 					</div>
 				)}
-			</div>
+				</div>
+			)}
 		</div>
 	)
 }

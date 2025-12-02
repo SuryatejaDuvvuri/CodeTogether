@@ -8,10 +8,80 @@ import { db, rtdbEnabled } from '../lib/firebase.ts'
 import { getIdentity } from '../lib/identity.ts'
 import { recordCollaboration, recordCodeEdit, recordChatMessage, recordActiveTime, updateRoomStats, incrementRoomMessages, getCurrentUserStats } from '../lib/stats.ts'
 import { onDisconnect, onValue, push, ref, remove, serverTimestamp, set } from 'firebase/database'
+import { playSuccess, playFail, playStreak, playMessage } from '../lib/sounds.ts'
+
+// Test suite for the coding challenge
+type Test = {
+	name: string
+	run: (fn: any) => boolean
+}
+
+const CHALLENGE_TESTS: Test[] = [
+	{
+		name: 'add(1, 2) should equal 3',
+		run: (fn) => {
+			try {
+				return fn(1, 2) === 3
+			} catch {
+				return false
+			}
+		},
+	},
+	{
+		name: 'add(0, 0) should equal 0',
+		run: (fn) => {
+			try {
+				return fn(0, 0) === 0
+			} catch {
+				return false
+			}
+		},
+	},
+	{
+		name: 'add(-1, 1) should equal 0',
+		run: (fn) => {
+			try {
+				return fn(-1, 1) === 0
+			} catch {
+				return false
+			}
+		},
+	},
+	{
+		name: 'add(10, -5) should equal 5',
+		run: (fn) => {
+			try {
+				return fn(10, -5) === 5
+			} catch {
+				return false
+			}
+		},
+	},
+	{
+		name: 'add(100, 200) should equal 300',
+		run: (fn) => {
+			try {
+				return fn(100, 200) === 300
+			} catch {
+				return false
+			}
+		},
+	},
+]
+
+type TestResult = {
+	name: string
+	passed: boolean
+}
 
 function Arena() {
+	const [challengeStarted, setChallengeStarted] = useState(false)
 	const [secondsLeft, setSecondsLeft] = useState(5 * 60)
 	const [showSummary, setShowSummary] = useState(false)
+	const [testResults, setTestResults] = useState<TestResult[]>([])
+	const [xp, setXp] = useState(0)
+	const [streak, setStreak] = useState(0)
+	const [typingUsers, setTypingUsers] = useState<Set<string>>(new Set())
 	const [roomName, setRoomName] = useState<string | null | undefined>(() => (rtdbEnabled ? undefined : 'Offline Demo Room'))
 	const [participants, setParticipants] = useState<Array<{ id: string; name: string }>>([])
 	const [messages, setMessages] = useState<Array<{ id: string; text: string; authorName: string; createdAt?: number }>>([])
@@ -37,8 +107,9 @@ function Arena() {
 	const roomId = rtdbEnabled ? paramRoomId : (paramRoomId ?? 'offline-demo')
 	const identity = useMemo(() => getIdentity(), [])
 
+	// Timer only runs after challenge starts
 	useEffect(() => {
-		if (!roomId) return
+		if (!roomId || !challengeStarted) return
 		const id = setInterval(() => {
 			setSecondsLeft((s) => {
 				if (s <= 1) {
@@ -50,11 +121,15 @@ function Arena() {
 			})
 		}, 1000)
 		return () => clearInterval(id)
-	}, [roomId])
+	}, [roomId, challengeStarted])
 
 	useEffect(() => {
 		setSecondsLeft(5 * 60)
 		setShowSummary(false)
+		setChallengeStarted(false)
+		setTestResults([])
+		setXp(0)
+		setStreak(0)
 	}, [roomId])
 
 	useEffect(() => {
@@ -239,6 +314,8 @@ useEffect(() => {
 }, [roomId, roomName, rtdbEnabled])
 
 	const sendMessage = async (event?: FormEvent<HTMLFormElement>) => {
+		// Play message sound
+		playMessage()
 		event?.preventDefault()
 		const textToSend = messageInput.trim()
 		
@@ -290,11 +367,6 @@ useEffect(() => {
 		}
 	}
 
-	const mmss = useMemo(() => {
-		const m = Math.floor(secondsLeft / 60).toString().padStart(2, '0')
-		const s = (secondsLeft % 60).toString().padStart(2, '0')
-		return `${m}:${s}`
-	}, [secondsLeft])
 
 	// Check syntax before running
 	const checkSyntax = (code: string): { valid: boolean; error?: string } => {
@@ -310,7 +382,7 @@ useEffect(() => {
 		}
 	}
 
-	// Run JavaScript code
+	// Run JavaScript code with test suite
 	const runCode = () => {
 		if (!editorRef.current || isRunning) return
 		
@@ -326,6 +398,7 @@ useEffect(() => {
 		if (!syntaxCheck.valid) {
 			setOutput(`Syntax Error: ${syntaxCheck.error}`)
 			setOutputType('error')
+			playFail()
 			setIsRunning(false)
 			return
 		}
@@ -365,35 +438,112 @@ useEffect(() => {
 				console.error = originalError
 				console.warn = originalWarn
 				
+				// Run test suite if challenge is started
+				let testOutput = ''
+				let passedTests = 0
+				let totalTests = CHALLENGE_TESTS.length
+				const results: TestResult[] = []
+				
+				if (challengeStarted) {
+					// Try to extract the function from the code
+					// Look for function named 'add' or any exported function
+					let testFn: any = null
+					try {
+						// Try to get 'add' function from the executed code
+						const funcCode = new Function(code + '; return typeof add !== "undefined" ? add : null;')()
+						if (funcCode && typeof funcCode === 'function') {
+							testFn = funcCode
+						} else {
+							// Try to get any function from the scope
+							const scope = new Function(code + '; return { add: typeof add !== "undefined" ? add : null };')()
+							testFn = scope.add
+						}
+					} catch {
+						// If we can't extract, try to use the result if it's a function
+						if (typeof result === 'function') {
+							testFn = result
+						}
+					}
+					
+					if (testFn && typeof testFn === 'function') {
+						testOutput += '🧪 Running Tests:\n\n'
+						CHALLENGE_TESTS.forEach((test, index) => {
+							const passed = test.run(testFn)
+							results.push({ name: test.name, passed })
+							if (passed) {
+								passedTests++
+								testOutput += `✅ Test ${index + 1}: ${test.name}\n`
+							} else {
+								testOutput += `❌ Test ${index + 1}: ${test.name}\n`
+							}
+						})
+						
+						testOutput += `\n📊 Results: ${passedTests}/${totalTests} tests passed\n`
+						
+						// Update XP based on passed tests
+						const previousPassed = testResults.filter(t => t.passed).length
+						const newPassed = passedTests
+						if (newPassed > previousPassed) {
+							const xpGain = (newPassed - previousPassed) * 2
+							setXp(prev => prev + xpGain)
+							playSuccess()
+							
+							// Update streak
+							if (newPassed === totalTests) {
+								setStreak(prev => {
+									const newStreak = prev + 1
+									if (newStreak > 0 && newStreak % 3 === 0) {
+										playStreak()
+									}
+									return newStreak
+								})
+							}
+						} else if (newPassed < previousPassed) {
+							playFail()
+							setStreak(0)
+						}
+						
+						setTestResults(results)
+					} else {
+						testOutput += '⚠️  Could not find function to test. Make sure your code defines an "add" function.\n'
+					}
+				}
+				
 				// Build output
-				let outputText = ''
+				let outputText = testOutput
 				let hasOutput = false
 				
 				if (errors.length > 0) {
-					outputText += `❌ Errors:\n${errors.join('\n')}\n\n`
+					outputText += `\n❌ Errors:\n${errors.join('\n')}\n\n`
 					setOutputType('error')
 					hasOutput = true
 				}
 				
 				if (warnings.length > 0) {
-					outputText += `⚠️  Warnings:\n${warnings.join('\n')}\n\n`
+					outputText += `\n⚠️  Warnings:\n${warnings.join('\n')}\n\n`
 					if (!hasOutput) setOutputType('info')
 					hasOutput = true
 				}
 				
 				if (logs.length > 0) {
 					outputText += logs.join('\n')
-					if (!hasOutput) setOutputType('success')
+					if (!hasOutput && !challengeStarted) setOutputType('success')
 					hasOutput = true
-				} else if (result !== undefined) {
+				} else if (result !== undefined && !challengeStarted) {
 					outputText += String(result)
 					if (!hasOutput) setOutputType('success')
 					hasOutput = true
 				}
 				
-				if (!hasOutput) {
+				if (!hasOutput && !challengeStarted) {
 					outputText = '✓ Code compiled and executed successfully (no output)'
 					setOutputType('success')
+				}
+				
+				if (challengeStarted && passedTests === totalTests) {
+					setOutputType('success')
+				} else if (challengeStarted && passedTests < totalTests) {
+					setOutputType('info')
 				}
 				
 				setOutput(outputText)
@@ -405,14 +555,21 @@ useEffect(() => {
 				
 				setOutput(`❌ Runtime Error: ${error instanceof Error ? error.message : String(error)}`)
 				setOutputType('error')
+				playFail()
 			}
 		} catch (error) {
 			setOutput(`❌ Execution Error: ${error instanceof Error ? error.message : String(error)}`)
 			setOutputType('error')
+			playFail()
 		} finally {
 			setIsRunning(false)
 		}
 	}
+
+	// Format time as MM:SS
+	const mmss = `${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, '0')}`
+	const passedTests = testResults.filter(t => t.passed).length
+	const totalTests = CHALLENGE_TESTS.length
 
 	if (!roomId) {
 		return (
@@ -446,7 +603,39 @@ useEffect(() => {
 	}
 
 	return (
-		<div className="h-[calc(100vh-120px)] mx-auto max-w-6xl p-4 space-y-4">
+		<>
+			{/* Challenge Intro Modal - Must be outside main container to properly overlay */}
+			{!challengeStarted && (
+				<div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[9999] backdrop-blur-md" style={{ pointerEvents: 'auto' }}>
+					<div className="bg-white dark:bg-neutral-900 rounded-xl p-8 max-w-md w-full mx-4 border-2 border-blue-200 dark:border-blue-800 shadow-2xl" style={{ pointerEvents: 'auto' }}>
+						<h2 className="text-2xl font-bold mb-3 text-neutral-900 dark:text-neutral-100">🎯 Challenge: Fix the Function</h2>
+						<p className="text-sm text-neutral-700 dark:text-neutral-300 mb-4 leading-relaxed">
+							<strong>Your Task:</strong> Fix the <code className="bg-neutral-100 dark:bg-neutral-800 px-1.5 py-0.5 rounded">add</code> function so all tests pass before time runs out.
+						</p>
+						<div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4 mb-6">
+							<h3 className="font-semibold text-sm mb-2 text-blue-900 dark:text-blue-100">📋 Challenge Details:</h3>
+							<ul className="text-xs text-blue-800 dark:text-blue-200 space-y-1 list-disc list-inside">
+								<li>You have <strong>5 minutes</strong> to complete the challenge</li>
+								<li>Run your code to see test results</li>
+								<li>Earn <strong>+2 XP</strong> for each test passed</li>
+								<li>Build a streak by passing all tests!</li>
+							</ul>
+						</div>
+						<button
+							type="button"
+							onClick={() => {
+								setChallengeStarted(true)
+								playSuccess()
+							}}
+							className="w-full px-6 py-3 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white rounded-lg text-base font-semibold transition-all cursor-pointer touch-manipulation active:scale-95 shadow-lg hover:shadow-xl"
+						>
+							🚀 Start Challenge
+						</button>
+					</div>
+				</div>
+			)}
+			<div className={`h-[calc(100vh-120px)] mx-auto max-w-6xl p-4 space-y-4 ${!challengeStarted ? 'opacity-30 pointer-events-none' : ''}`}>
+			
 			{/* Header */}
 			<div className="flex items-center justify-between bg-white dark:bg-neutral-900 rounded-lg border px-4 py-3 shadow-sm">
 				<div>
@@ -463,10 +652,23 @@ useEffect(() => {
 					<div className="flex items-center gap-2 px-3 py-1.5 bg-neutral-100 dark:bg-neutral-800 rounded-full">
 						<span className="text-xs font-medium text-neutral-700 dark:text-neutral-300">{participants.length} online</span>
 					</div>
-					<div className="flex items-center gap-2 px-3 py-1.5 bg-neutral-100 dark:bg-neutral-800 rounded-full">
-						<span className="text-xs text-neutral-600 dark:text-neutral-400">Timer:</span>
-						<span className="font-mono font-semibold text-neutral-900 dark:text-neutral-100">{mmss}</span>
-					</div>
+					{challengeStarted && (
+						<>
+							{streak > 0 && (
+								<span className="px-3 py-1.5 bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 rounded-full text-xs font-semibold flex items-center gap-1.5">
+									🔥 Streak: {streak}
+								</span>
+							)}
+							<div className="flex items-center gap-2 px-3 py-1.5 bg-neutral-100 dark:bg-neutral-800 rounded-full">
+								<span className="text-xs text-neutral-600 dark:text-neutral-400">Timer:</span>
+								<span className="font-mono font-semibold text-neutral-900 dark:text-neutral-100">{mmss}</span>
+							</div>
+							<div className="flex items-center gap-2 px-3 py-1.5 bg-purple-100 dark:bg-purple-900/30 rounded-full">
+								<span className="text-xs text-neutral-600 dark:text-neutral-400">XP:</span>
+								<span className="font-semibold text-purple-700 dark:text-purple-300">{xp}</span>
+							</div>
+						</>
+					)}
 					{saveStatus === 'saving' && (
 						<span className="px-3 py-1.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full text-xs font-medium">
 							⏳ Saving...
@@ -484,6 +686,37 @@ useEffect(() => {
 					)}
 				</div>
 			</div>
+			{/* Challenge Objective Card (only shown when challenge started) */}
+			{challengeStarted && (
+				<div className="border-2 border-blue-200 dark:border-blue-800 rounded-xl p-4 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 shadow-lg">
+					<div className="flex items-center justify-between">
+						<div className="flex-1">
+							<h3 className="font-bold text-sm mb-2 text-blue-900 dark:text-blue-100">🎯 Challenge Objective</h3>
+							<p className="text-xs text-blue-800 dark:text-blue-200 mb-3">
+								Fix the <code className="bg-white/60 dark:bg-neutral-800/60 px-1.5 py-0.5 rounded">add(a, b)</code> function to pass all {totalTests} tests
+							</p>
+							<div className="flex items-center gap-4">
+								<div className="flex items-center gap-2">
+									<span className="text-xs font-medium text-blue-700 dark:text-blue-300">Tests:</span>
+									<span className="text-sm font-bold text-blue-900 dark:text-blue-100">
+										{passedTests}/{totalTests}
+									</span>
+									<div className="w-24 h-2 bg-blue-200 dark:bg-blue-800 rounded-full overflow-hidden">
+										<div 
+											className="h-full bg-blue-600 dark:bg-blue-400 transition-all duration-300"
+											style={{ width: `${(passedTests / totalTests) * 100}%` }}
+										/>
+									</div>
+								</div>
+								<div className="flex items-center gap-2">
+									<span className="text-xs font-medium text-blue-700 dark:text-blue-300">Time Left:</span>
+									<span className="text-sm font-bold text-blue-900 dark:text-blue-100 font-mono">{mmss}</span>
+								</div>
+							</div>
+						</div>
+					</div>
+				</div>
+			)}
 			<div className="grid grid-cols-1 lg:grid-cols-[3fr_1fr] gap-4 h-full">
 				<div className="flex flex-col border-2 border-neutral-200 dark:border-neutral-700 rounded-xl overflow-hidden h-full bg-white dark:bg-neutral-900 shadow-lg">
 					<div className="flex items-center justify-between px-5 py-3 border-b border-neutral-200 dark:border-neutral-700 bg-gradient-to-r from-neutral-50 to-white dark:from-neutral-800 dark:to-neutral-900 flex-shrink-0">
@@ -491,7 +724,7 @@ useEffect(() => {
 						<button
 							type="button"
 							onClick={runCode}
-							disabled={isRunning}
+							disabled={isRunning || !challengeStarted}
 							className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 disabled:bg-neutral-400 text-white rounded-lg text-sm font-semibold transition-all cursor-pointer touch-manipulation disabled:cursor-not-allowed shadow-md hover:shadow-lg active:scale-95 flex items-center gap-2"
 						>
 							{isRunning ? (
@@ -511,7 +744,7 @@ useEffect(() => {
 						<Editor
 						height="100%"
 						defaultLanguage="javascript"
-						defaultValue={'// Work together here!\nfunction add(a, b) {\n  return a + b;\n}\n'}
+						defaultValue={'// Challenge: Fix the add function to pass all tests!\n// Run your code to see test results.\n\nfunction add(a, b) {\n  // TODO: Fix this function\n  return a + b;\n}\n'}
 						theme="vs-dark"
 						options={{
 							minimap: { enabled: false },
@@ -631,18 +864,23 @@ useEffect(() => {
 							// Listen for remote changes
 							yText.observe(applyFromY)
 							
-							// Listen for awareness changes (cursor positions)
+							// Listen for awareness changes (cursor positions and typing)
 							provider.awareness.on('change', () => {
 								updateRemoteCursors()
 								const peers = new Set<string>()
+								const typing = new Set<string>()
 								provider.awareness.getStates().forEach((state, clientId) => {
 									if (clientId !== provider.awareness.clientID) {
 										const user = state.user as { name?: string } | undefined
 										const name = user?.name || `User ${clientId.toString().slice(0, 4)}`
 										peers.add(name)
+										if (state.typing) {
+											typing.add(name)
+										}
 									}
 								})
 								setCollaborators(peers)
+								setTypingUsers(typing)
 							})
 							
 							// Update cursors periodically and on scroll
@@ -812,7 +1050,14 @@ useEffect(() => {
 					{/* Chat */}
 					<div className="flex-1 flex flex-col min-h-0 relative border-t border-neutral-200 dark:border-neutral-700" style={{ minHeight: '200px', maxHeight: '400px' }}>
 						<div className="px-4 py-2.5 border-b border-neutral-200 dark:border-neutral-700 bg-gradient-to-r from-neutral-50 to-white dark:from-neutral-800 dark:to-neutral-900 flex-shrink-0">
-							<h3 className="text-sm font-bold text-neutral-900 dark:text-neutral-100">💬 Chat</h3>
+							<div className="flex items-center justify-between">
+								<h3 className="text-sm font-bold text-neutral-900 dark:text-neutral-100">💬 Chat</h3>
+								{typingUsers.size > 0 && (
+									<span className="text-xs text-neutral-500 dark:text-neutral-400 italic">
+										{Array.from(typingUsers).join(', ')} {typingUsers.size === 1 ? 'is' : 'are'} typing...
+									</span>
+								)}
+							</div>
 						</div>
 						<div className="flex-1 overflow-y-auto px-4 py-3 space-y-2.5 text-sm min-h-0" style={{ maxHeight: 'calc(400px - 120px)' }}>
 							{messages.map((msg) => (
@@ -849,6 +1094,18 @@ useEffect(() => {
 									value={messageInput}
 									onChange={(e) => {
 										setMessageInput(e.target.value)
+										// Track typing indicator (simple: if input has content, user is typing)
+										if (e.target.value.length > 0 && providerRef.current) {
+											providerRef.current.awareness.setLocalStateField('typing', true)
+											// Clear typing after 3 seconds of no input
+											setTimeout(() => {
+												if (providerRef.current) {
+													providerRef.current.awareness.setLocalStateField('typing', false)
+												}
+											}, 3000)
+										} else if (providerRef.current) {
+											providerRef.current.awareness.setLocalStateField('typing', false)
+										}
 									}}
 									onKeyDown={(e) => {
 										if (e.key === 'Enter' && !e.shiftKey) {
@@ -893,23 +1150,107 @@ useEffect(() => {
 				</div>
 			</div>
 			{showSummary && (
-				<div className="fixed inset-0 bg-black/50 flex items-center justify-center">
-					<div className="bg-white dark:bg-neutral-900 border rounded-lg p-6 w-[480px]">
-						<h2 className="text-lg font-semibold mb-2">Session Summary</h2>
-						<p className="text-sm text-neutral-600 dark:text-neutral-300 mb-4">
-							Mock grading: 7/10 tests passed. Great teamwork!
-						</p>
-						<button 
-							type="button"
-							onClick={() => setShowSummary(false)} 
-							className="px-3 py-2 border rounded-md hover:bg-neutral-50 dark:hover:bg-neutral-800 active:scale-95 transition-transform cursor-pointer touch-manipulation"
-						>
-							Close
-						</button>
+				<div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 animate-in fade-in">
+					<div className="bg-white dark:bg-neutral-900 border-2 border-blue-200 dark:border-blue-800 rounded-xl p-8 w-[520px] max-w-[90vw] shadow-2xl animate-in slide-in-from-top-2">
+						<h2 className="text-2xl font-bold mb-4 text-neutral-900 dark:text-neutral-100">📊 Challenge Summary</h2>
+						
+						{/* Test Results */}
+						<div className="mb-6">
+							<div className="flex items-center justify-between mb-3">
+								<span className="text-sm font-semibold text-neutral-700 dark:text-neutral-300">Tests Passed:</span>
+								<span className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+									{passedTests}/{totalTests}
+								</span>
+							</div>
+							<div className="w-full h-3 bg-neutral-200 dark:bg-neutral-700 rounded-full overflow-hidden mb-4">
+								<div 
+									className={`h-full transition-all duration-500 ${
+										passedTests === totalTests 
+											? 'bg-green-500' 
+											: passedTests > totalTests / 2 
+											? 'bg-yellow-500' 
+											: 'bg-red-500'
+									}`}
+									style={{ width: `${(passedTests / totalTests) * 100}%` }}
+								/>
+							</div>
+						</div>
+						
+						{/* Stats Grid */}
+						<div className="grid grid-cols-2 gap-4 mb-6">
+							<div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
+								<div className="text-xs text-blue-600 dark:text-blue-400 font-medium mb-1">Time Spent</div>
+								<div className="text-lg font-bold text-blue-900 dark:text-blue-100">
+									{Math.floor((5 * 60 - secondsLeft) / 60)}:{(5 * 60 - secondsLeft) % 60 < 10 ? '0' : ''}{(5 * 60 - secondsLeft) % 60}
+								</div>
+							</div>
+							<div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-4">
+								<div className="text-xs text-purple-600 dark:text-purple-400 font-medium mb-1">XP Earned</div>
+								<div className="text-lg font-bold text-purple-900 dark:text-purple-100">+{xp}</div>
+							</div>
+							{userStats && (
+								<>
+									<div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-4">
+										<div className="text-xs text-green-600 dark:text-green-400 font-medium mb-1">Code Edits</div>
+										<div className="text-lg font-bold text-green-900 dark:text-green-100">{userStats.codeEdits || 0}</div>
+									</div>
+									<div className="bg-orange-50 dark:bg-orange-900/20 rounded-lg p-4">
+										<div className="text-xs text-orange-600 dark:text-orange-400 font-medium mb-1">Best Streak</div>
+										<div className="text-lg font-bold text-orange-900 dark:text-orange-100">{streak}</div>
+									</div>
+								</>
+							)}
+						</div>
+						
+						{/* Message */}
+						{passedTests === totalTests ? (
+							<div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4 mb-6">
+								<p className="text-sm font-semibold text-green-800 dark:text-green-200">
+									🎉 Excellent! All tests passed! Great collaboration!
+								</p>
+							</div>
+						) : passedTests > 0 ? (
+							<div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4 mb-6">
+								<p className="text-sm font-semibold text-yellow-800 dark:text-yellow-200">
+									Good progress! Keep working together to pass all tests.
+								</p>
+							</div>
+						) : (
+							<div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 mb-6">
+								<p className="text-sm font-semibold text-red-800 dark:text-red-200">
+									Keep trying! Review the function and test cases.
+								</p>
+							</div>
+						)}
+						
+						<div className="flex gap-3">
+							<button 
+								type="button"
+								onClick={() => {
+									setShowSummary(false)
+									setChallengeStarted(false)
+									setSecondsLeft(5 * 60)
+									setTestResults([])
+									setXp(0)
+									setStreak(0)
+								}} 
+								className="flex-1 px-4 py-2.5 border-2 border-neutral-300 dark:border-neutral-600 rounded-lg hover:bg-neutral-50 dark:hover:bg-neutral-800 active:scale-95 transition-all cursor-pointer touch-manipulation text-sm font-semibold text-neutral-700 dark:text-neutral-300"
+							>
+								Try Again
+							</button>
+							<button 
+								type="button"
+								onClick={() => setShowSummary(false)} 
+								className="flex-1 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white rounded-lg active:scale-95 transition-all cursor-pointer touch-manipulation text-sm font-semibold shadow-md"
+							>
+								Continue
+							</button>
+						</div>
 					</div>
 				</div>
 			)}
-		</div>
+			</div>
+		</>
 	)
 }
 

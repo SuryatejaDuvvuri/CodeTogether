@@ -226,6 +226,48 @@ function Lobby() {
 							<p className="text-sm text-neutral-600 dark:text-neutral-400">Flip cards with spaced repetition algorithm for long-term retention.</p>
 						</Link>
 					</div>
+
+					{/* Quick Start Modes */}
+					<div className="border-2 border-neutral-200 dark:border-neutral-700 rounded-xl p-5 space-y-3 bg-white dark:bg-neutral-900 shadow-lg">
+						<h2 className="font-bold text-base text-neutral-900 dark:text-neutral-100 flex items-center gap-2 mb-3">
+							<span>🚀</span>
+							<span>Quick Start</span>
+						</h2>
+						<button
+							type="button"
+							onClick={() => {
+								const id = `practice-${Math.random().toString(36).slice(2, 8)}`
+								navigate(`/arena/${id}`)
+							}}
+							className="w-full px-4 py-3 bg-green-600 hover:bg-green-700 active:bg-green-800 text-white rounded-lg text-sm font-semibold transition-all cursor-pointer touch-manipulation active:scale-95 shadow-md hover:shadow-lg text-left flex items-center gap-2"
+						>
+							<span>💻</span>
+							<span>Practice Alone</span>
+						</button>
+						<button
+							type="button"
+							onClick={() => {
+								const id = `challenge-${Math.random().toString(36).slice(2, 8)}`
+								navigate(`/arena/${id}`)
+							}}
+							className="w-full px-4 py-3 bg-orange-600 hover:bg-orange-700 active:bg-orange-800 text-white rounded-lg text-sm font-semibold transition-all cursor-pointer touch-manipulation active:scale-95 shadow-md hover:shadow-lg text-left flex items-center gap-2"
+						>
+							<span>⏱️</span>
+							<span>5-Minute Challenge</span>
+						</button>
+						<button
+							type="button"
+							onClick={() => {
+								// Mock: Match with a random partner (for demo, just create a room)
+								const id = `pair-${Math.random().toString(36).slice(2, 8)}`
+								navigate(`/arena/${id}`)
+							}}
+							className="w-full px-4 py-3 bg-pink-600 hover:bg-pink-700 active:bg-pink-800 text-white rounded-lg text-sm font-semibold transition-all cursor-pointer touch-manipulation active:scale-95 shadow-md hover:shadow-lg text-left flex items-center gap-2"
+						>
+							<span>👥</span>
+							<span>Match With Study Partner</span>
+						</button>
+					</div>
 					{!rtdbEnabled && (
 						<div className="border rounded-lg p-4 text-xs text-neutral-500">
 							Firebase Realtime Database is not configured. Add <code>VITE_FIREBASE_DATABASE_URL</code> to your <code>.env</code> to enable shared rooms, presence, and chat. Until then, lobby data is local to this browser.
