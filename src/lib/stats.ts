@@ -353,7 +353,7 @@ function calculateTeamScore(room: Omit<RoomStats, 'id' | 'score'>): number {
 
 // Calculate individual score for Speedrun leaderboard: 0.4*A + 0.25*F + 0.2*C + 0.15*D
 // Note: C (collaboration) is now based on active participation, not just joining
-export function calculateIndividualScore(stats: UserStats): number {
+function calculateIndividualScore(stats: UserStats): number {
 	const A = stats.accuracy
 	const F = stats.streak
 	const C = stats.collaboration

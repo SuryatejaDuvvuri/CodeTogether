@@ -29,110 +29,223 @@ type CardProgress = {
 }
 
 const FLASHCARD_DECK: Flashcard[] = [
+	// ===== C++ FUNDAMENTALS =====
 	{
-		id: 'fc1',
-		front: 'What is a closure in JavaScript?',
-		back: 'A closure is a function that has access to variables in its outer (enclosing) lexical scope, even after the outer function has returned.',
-		category: 'JavaScript Fundamentals',
+		id: 'cpp1',
+		front: 'What is the difference between #include <iostream> and #include "myfile.h"?',
+		back: 'Angle brackets < > search in system/standard library directories first. Quotes " " search in the current directory first, then system directories. Use < > for standard library, " " for your own headers.',
+		category: 'C++ Basics',
+		difficulty: 'easy',
+	},
+	{
+		id: 'cpp2',
+		front: 'What does "using namespace std;" do and why might you avoid it?',
+		back: 'It allows you to use names from the std namespace without the std:: prefix (like cout instead of std::cout). Avoid it in headers to prevent namespace pollution and potential naming conflicts.',
+		category: 'C++ Basics',
 		difficulty: 'medium',
 	},
 	{
-		id: 'fc2',
-		front: 'What does the spread operator (...) do?',
-		back: 'The spread operator expands iterables (arrays, objects) into individual elements. It can be used for copying arrays, merging objects, or passing arguments.',
-		category: 'JavaScript Fundamentals',
+		id: 'cpp3',
+		front: 'What is the difference between cin >> and getline()?',
+		back: 'cin >> stops reading at whitespace (spaces, tabs, newlines). getline() reads the entire line including spaces until it hits a newline. Use getline() when you need to read strings with spaces.',
+		category: 'C++ Basics',
 		difficulty: 'easy',
 	},
 	{
-		id: 'fc3',
-		front: 'What is the difference between == and ===?',
-		back: '== performs type coercion (converts types before comparison), while === checks both value and type without coercion (strict equality).',
-		category: 'JavaScript Fundamentals',
+		id: 'cpp4',
+		front: 'What is a segmentation fault (segfault)?',
+		back: 'A segmentation fault occurs when a program tries to access memory it doesn\'t have permission to access. Common causes: dereferencing null/uninitialized pointers, array out-of-bounds access, stack overflow.',
+		category: 'C++ Debugging',
+		difficulty: 'medium',
+	},
+	{
+		id: 'cpp5',
+		front: 'What is the difference between passing by value, by reference, and by pointer?',
+		back: 'By value: copies the argument (changes don\'t affect original). By reference (&): alias to original (changes affect original, no copy). By pointer (*): passes memory address (changes affect original, can be null).',
+		category: 'C++ Functions',
+		difficulty: 'medium',
+	},
+	// ===== POINTERS & MEMORY =====
+	{
+		id: 'cpp6',
+		front: 'What does int* ptr = nullptr; mean?',
+		back: 'Declares a pointer to an integer and initializes it to nullptr (null pointer). nullptr is the C++11 way to represent a pointer that points to nothing. Always initialize pointers!',
+		category: 'Pointers',
 		difficulty: 'easy',
 	},
 	{
-		id: 'fc4',
-		front: 'What is the event loop?',
-		back: 'The event loop is JavaScript\'s mechanism for handling asynchronous operations. It continuously checks the call stack and message queue, executing callbacks when the stack is empty.',
-		category: 'JavaScript Advanced',
+		id: 'cpp7',
+		front: 'What is the difference between *ptr and &var?',
+		back: '* (dereference) gets the value at the address the pointer points to. & (address-of) gets the memory address of a variable. *ptr reads/writes value, &var gets location.',
+		category: 'Pointers',
+		difficulty: 'medium',
+	},
+	{
+		id: 'cpp8',
+		front: 'What is a memory leak and how do you prevent it?',
+		back: 'A memory leak occurs when dynamically allocated memory (new) is never freed (delete). Prevent by: always pairing new with delete, using smart pointers (unique_ptr, shared_ptr), or RAII pattern.',
+		category: 'Memory Management',
 		difficulty: 'hard',
 	},
 	{
-		id: 'fc5',
-		front: 'What is a promise?',
-		back: 'A promise is an object representing the eventual completion or failure of an asynchronous operation. It has three states: pending, fulfilled, or rejected.',
-		category: 'JavaScript Advanced',
-		difficulty: 'medium',
-	},
-	{
-		id: 'fc6',
-		front: 'What is destructuring?',
-		back: 'Destructuring is a JavaScript feature that allows extracting values from arrays or properties from objects into distinct variables using a concise syntax.',
-		category: 'JavaScript Fundamentals',
-		difficulty: 'easy',
-	},
-	{
-		id: 'fc7',
-		front: 'What is the difference between let, const, and var?',
-		back: 'let is block-scoped and can be reassigned. const is block-scoped and cannot be reassigned. var is function-scoped and can be reassigned. let and const are not hoisted like var.',
-		category: 'JavaScript Fundamentals',
-		difficulty: 'medium',
-	},
-	{
-		id: 'fc8',
-		front: 'What is a higher-order function?',
-		back: 'A higher-order function is a function that either takes one or more functions as arguments, returns a function, or both. Examples include map, filter, and reduce.',
-		category: 'JavaScript Fundamentals',
-		difficulty: 'medium',
-	},
-	{
-		id: 'fc9',
-		front: 'What is async/await?',
-		back: 'async/await is syntactic sugar for promises that makes asynchronous code look and behave more like synchronous code. async functions return promises, and await pauses execution until the promise resolves.',
-		category: 'JavaScript Advanced',
-		difficulty: 'medium',
-	},
-	{
-		id: 'fc10',
-		front: 'What is the difference between null and undefined?',
-		back: 'null is an intentional absence of value (assigned by the programmer). undefined means a variable has been declared but not assigned a value. typeof null is "object" (a bug), typeof undefined is "undefined".',
-		category: 'JavaScript Fundamentals',
-		difficulty: 'easy',
-	},
-	{
-		id: 'fc11',
-		front: 'What is the purpose of useEffect in React?',
-		back: 'useEffect is a React hook that lets you perform side effects in function components. It runs after render and can handle API calls, subscriptions, DOM manipulation, and cleanup.',
-		category: 'React',
-		difficulty: 'medium',
-	},
-	{
-		id: 'fc12',
-		front: 'What is the difference between useState and useReducer?',
-		back: 'useState is for simple state management with a single value. useReducer is for complex state logic with multiple sub-values or when the next state depends on the previous one. useReducer is more predictable for complex updates.',
-		category: 'React',
+		id: 'cpp9',
+		front: 'What is the difference between stack and heap memory?',
+		back: 'Stack: automatic, fast, limited size, LIFO order, for local variables. Heap: manual (new/delete), slower, larger, for dynamic allocation. Stack memory is freed automatically when scope ends.',
+		category: 'Memory Management',
 		difficulty: 'hard',
 	},
 	{
-		id: 'fc13',
-		front: 'What is memoization?',
-		back: 'Memoization is an optimization technique that caches the results of expensive function calls and returns the cached result when the same inputs occur again. React provides useMemo and useCallback for this.',
-		category: 'React',
+		id: 'cpp10',
+		front: 'What happens if you delete a pointer twice?',
+		back: 'Undefined behavior! Double delete can crash your program or corrupt memory. After delete, set pointer to nullptr. Deleting nullptr is safe and does nothing.',
+		category: 'Memory Management',
 		difficulty: 'medium',
 	},
+	// ===== ARRAYS & VECTORS =====
 	{
-		id: 'fc14',
-		front: 'What is the virtual DOM?',
-		back: 'The virtual DOM is a JavaScript representation of the real DOM. React uses it to optimize updates by comparing the virtual DOM with the previous version and only updating the parts that changed (reconciliation).',
-		category: 'React',
-		difficulty: 'medium',
-	},
-	{
-		id: 'fc15',
-		front: 'What is JSX?',
-		back: 'JSX is a syntax extension for JavaScript that looks like HTML. It allows you to write HTML-like code in JavaScript, which React then transforms into React.createElement() calls.',
-		category: 'React',
+		id: 'cpp11',
+		front: 'What is the difference between a C-style array and std::vector?',
+		back: 'C-style array: fixed size, no bounds checking, decays to pointer. vector: dynamic size, bounds checking with .at(), knows its size with .size(), safer and more flexible.',
+		category: 'Data Structures',
 		difficulty: 'easy',
+	},
+	{
+		id: 'cpp12',
+		front: 'What does vector.push_back() do vs vector.emplace_back()?',
+		back: 'push_back() copies/moves an existing object into the vector. emplace_back() constructs the object in-place inside the vector (more efficient, avoids copy). Prefer emplace_back() for complex objects.',
+		category: 'Data Structures',
+		difficulty: 'medium',
+	},
+	{
+		id: 'cpp13',
+		front: 'What is array index out of bounds? Why doesn\'t C++ catch it?',
+		back: 'Accessing an index outside the valid range (0 to size-1). C++ doesn\'t check bounds for performance. This causes undefined behavior - might crash, return garbage, or seem to work. Use .at() for checked access.',
+		category: 'Data Structures',
+		difficulty: 'easy',
+	},
+	// ===== LOOPS & CONTROL FLOW =====
+	{
+		id: 'cpp14',
+		front: 'What is an infinite loop and how do you avoid it?',
+		back: 'A loop that never terminates because its condition never becomes false. Avoid by: ensuring loop variable changes, having a reachable exit condition, using break correctly. Common cause: forgetting to increment counter.',
+		category: 'Control Flow',
+		difficulty: 'easy',
+	},
+	{
+		id: 'cpp15',
+		front: 'What is the difference between break and continue?',
+		back: 'break: exits the loop entirely, execution continues after the loop. continue: skips the rest of the current iteration and jumps to the next iteration. Both only affect the innermost loop.',
+		category: 'Control Flow',
+		difficulty: 'easy',
+	},
+	{
+		id: 'cpp16',
+		front: 'What is a range-based for loop? Give an example.',
+		back: 'for (auto x : container) - iterates over each element in a container. Cleaner than index-based loops. Use "auto& x" to modify elements, "const auto& x" for read-only to avoid copies.',
+		category: 'Control Flow',
+		difficulty: 'medium',
+	},
+	// ===== CLASSES & OOP =====
+	{
+		id: 'cpp17',
+		front: 'What is the difference between public, private, and protected?',
+		back: 'public: accessible from anywhere. private: only accessible within the class. protected: accessible within the class and derived classes. Default is private for class, public for struct.',
+		category: 'OOP',
+		difficulty: 'medium',
+	},
+	{
+		id: 'cpp18',
+		front: 'What is a constructor and when is it called?',
+		back: 'A special member function that initializes an object when it\'s created. Same name as the class, no return type. Called automatically when you declare an object: MyClass obj; or MyClass* ptr = new MyClass();',
+		category: 'OOP',
+		difficulty: 'easy',
+	},
+	{
+		id: 'cpp19',
+		front: 'What is a destructor and when is it called?',
+		back: 'A special member function (~ClassName) that cleans up when an object is destroyed. Called automatically when object goes out of scope or delete is used. Use to free dynamic memory, close files, etc.',
+		category: 'OOP',
+		difficulty: 'medium',
+	},
+	{
+		id: 'cpp20',
+		front: 'What is the "this" pointer?',
+		back: '"this" is an implicit pointer available in non-static member functions that points to the current object. Used to: disambiguate members from parameters, return *this for chaining, pass object to other functions.',
+		category: 'OOP',
+		difficulty: 'medium',
+	},
+	// ===== COMMON ERRORS =====
+	{
+		id: 'cpp21',
+		front: 'What is the difference between = and == in C++?',
+		back: '= is assignment (sets a value). == is comparison (checks equality). Common bug: if (x = 5) assigns 5 to x and is always true! Use if (x == 5) to compare. Some put constant first: if (5 == x).',
+		category: 'Common Errors',
+		difficulty: 'easy',
+	},
+	{
+		id: 'cpp22',
+		front: 'What is an off-by-one error?',
+		back: 'An error where a loop runs one too many or one too few times. Common causes: using <= instead of <, starting at 1 instead of 0, forgetting arrays are 0-indexed. Very common in loops and array access.',
+		category: 'Common Errors',
+		difficulty: 'easy',
+	},
+	{
+		id: 'cpp23',
+		front: 'What is integer overflow and when does it happen?',
+		back: 'When a calculation exceeds the maximum value a type can hold. int max is ~2.1 billion. Overflow wraps around (can become negative!). Use long long for large numbers, or check before operations.',
+		category: 'Common Errors',
+		difficulty: 'medium',
+	},
+	{
+		id: 'cpp24',
+		front: 'Why does cout << "Hello" not print anything?',
+		back: 'Output is often buffered. It might not appear until: endl or "\\n" is used, cout.flush() is called, or the program ends. Also check: is there a return before the cout? Is the code path reachable?',
+		category: 'Common Errors',
+		difficulty: 'easy',
+	},
+	// ===== RECURSION =====
+	{
+		id: 'cpp25',
+		front: 'What are the two essential parts of a recursive function?',
+		back: '1) Base case: the condition that stops recursion (prevents infinite recursion). 2) Recursive case: the function calls itself with a "smaller" problem. Missing base case = stack overflow!',
+		category: 'Recursion',
+		difficulty: 'medium',
+	},
+	{
+		id: 'cpp26',
+		front: 'What is a stack overflow in the context of recursion?',
+		back: 'When too many recursive calls fill up the call stack memory. Caused by: missing/unreachable base case, recursion depth too deep. Each call uses stack space for variables and return address.',
+		category: 'Recursion',
+		difficulty: 'medium',
+	},
+	// ===== FILL IN THE BLANK STYLE =====
+	{
+		id: 'cpp27',
+		front: 'Fill in the blank: To read a full line with spaces, use _____(cin, str) instead of cin >> str',
+		back: 'getline(cin, str) - getline reads the entire line including spaces until it encounters a newline character.',
+		category: 'Fill in the Blank',
+		difficulty: 'easy',
+	},
+	{
+		id: 'cpp28',
+		front: 'Fill in the blank: To get the size of a vector v, use v._____() ',
+		back: 'v.size() - returns the number of elements in the vector. Note: returns size_t (unsigned), be careful comparing with negative numbers!',
+		category: 'Fill in the Blank',
+		difficulty: 'easy',
+	},
+	{
+		id: 'cpp29',
+		front: 'Fill in the blank: To add an element to the end of vector v, use v._____back(element)',
+		back: 'v.push_back(element) - adds element to the end of the vector and increases its size by 1. For better performance with objects, consider emplace_back().',
+		category: 'Fill in the Blank',
+		difficulty: 'easy',
+	},
+	{
+		id: 'cpp30',
+		front: 'Fill in the blank: In the function void swap(int& a, int& b), the & means pass by _____',
+		back: 'reference - The & symbol after the type means the parameter is a reference. Changes to a and b inside the function will affect the original variables.',
+		category: 'Fill in the Blank',
+		difficulty: 'medium',
 	},
 ]
 
@@ -237,18 +350,88 @@ function getCardsDue(): Flashcard[] {
 	})
 }
 
-// Convert flashcards to MCQ format
+// Convert flashcards to MCQ format with plausible distractors
 function createMCQCard(card: Flashcard): Flashcard {
-	// For demo, create simple MCQ from existing cards
-	const choices = [
-		card.back, // Correct answer
-		'A different answer that seems plausible',
-		'Another option that could be correct',
-		'An incorrect but related answer',
+	// C++ specific distractors based on category
+	const distractorsByCategory: Record<string, string[]> = {
+		'C++ Basics': [
+			'This is handled automatically by the compiler with no difference',
+			'Both options are equivalent and interchangeable',
+			'This only applies to C, not C++',
+			'The order of operations is reversed in modern compilers',
+		],
+		'Pointers': [
+			'The pointer is automatically freed when the function returns',
+			'Both operators do the same thing in different contexts',
+			'Pointers in C++ are always initialized to 0',
+			'The & operator creates a new copy of the variable',
+		],
+		'Memory Management': [
+			'C++ automatically manages all memory through garbage collection',
+			'Stack and heap memory are the same, just different names',
+			'Memory is always freed when variables go out of scope',
+			'Using new is optional since malloc still works the same way',
+		],
+		'Data Structures': [
+			'Both are exactly the same, vector is just an alias for array',
+			'Arrays in C++ automatically resize when needed',
+			'Vectors are slower than arrays and should be avoided',
+			'The size is always known at compile time for both',
+		],
+		'Control Flow': [
+			'Both keywords do the same thing in loops',
+			'These only work in while loops, not for loops',
+			'The loop must complete all iterations before these apply',
+			'This is deprecated in C++11 and later versions',
+		],
+		'OOP': [
+			'All members are public by default in both class and struct',
+			'Private members can be accessed using the dot operator',
+			'The constructor must always be called manually',
+			'Destructors are only needed for virtual classes',
+		],
+		'Common Errors': [
+			'C++ automatically catches and fixes this error at runtime',
+			'Modern compilers prevent this from ever happening',
+			'This only occurs in debug mode, not release builds',
+			'The behavior is well-defined and consistent across all platforms',
+		],
+		'Recursion': [
+			'Recursion always runs faster than iteration',
+			'The base case is optional for simple recursive functions',
+			'Stack space is unlimited for recursive calls',
+			'Recursive functions cannot return values',
+		],
+		'Fill in the Blank': [
+			'get()', 
+			'read()',
+			'input()',
+			'scan()',
+		],
+	}
+	
+	// Get category-specific distractors or use generic ones
+	const categoryDistractors = distractorsByCategory[card.category] || [
+		'This feature was removed in C++17',
+		'The compiler handles this automatically',
+		'This only applies to certain data types',
+		'No special handling is required',
 	]
+	
+	// Pick 3 random distractors
+	const shuffledDistractors = [...categoryDistractors].sort(() => Math.random() - 0.5).slice(0, 3)
+	
+	// Create shorter answer for MCQ (first sentence or key phrase of the back)
+	const shortAnswer = card.back.split('.')[0] + '.'
+	
+	const choices = [
+		shortAnswer, // Correct answer (shortened)
+		...shuffledDistractors,
+	]
+	
 	// Shuffle choices
 	const shuffled = [...choices].sort(() => Math.random() - 0.5)
-	const correctIndex = shuffled.indexOf(card.back)
+	const correctIndex = shuffled.indexOf(shortAnswer)
 	
 	return {
 		...card,
