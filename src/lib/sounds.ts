@@ -189,3 +189,40 @@ export function playNotification() {
 		console.warn('Audio playback failed:', error)
 	}
 }
+
+// Victory fanfare - for completing challenges
+export function playVictory() {
+	if (!isSoundEnabled()) return
+	
+	try {
+		const ctx = getAudioContext()
+		const now = ctx.currentTime
+		
+		// Triumphant fanfare - major chord progression
+		const notes = [
+			{ freq: 523.25, delay: 0, duration: 0.15 },    // C5
+			{ freq: 659.25, delay: 0.1, duration: 0.15 },  // E5
+			{ freq: 783.99, delay: 0.2, duration: 0.15 },  // G5
+			{ freq: 1046.5, delay: 0.3, duration: 0.4 },   // C6 (held longer)
+		]
+		
+		notes.forEach(({ freq, delay, duration }) => {
+			const osc = ctx.createOscillator()
+			const gain = ctx.createGain()
+			
+			osc.type = 'triangle'
+			osc.frequency.setValueAtTime(freq, now + delay)
+			
+			gain.gain.setValueAtTime(0.3, now + delay)
+			gain.gain.exponentialRampToValueAtTime(0.01, now + delay + duration)
+			
+			osc.connect(gain)
+			gain.connect(ctx.destination)
+			
+			osc.start(now + delay)
+			osc.stop(now + delay + duration)
+		})
+	} catch (error) {
+		console.warn('Audio playback failed:', error)
+	}
+}

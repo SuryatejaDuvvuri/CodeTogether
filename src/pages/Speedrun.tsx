@@ -1,989 +1,480 @@
 import { useEffect, useMemo, useState, useRef } from 'react'
+import type { CSSProperties } from 'react'
 import { recordAnswer, getCurrentUserStats } from '../lib/stats.ts'
 import { playSuccess, playFail, playStreak, playWarning } from '../lib/sounds.ts'
 
-type Question = {
-	id: string
-	prompt: string
-	choices: string[]
-	answerIndex: number
-	hint?: string // Optional hint for near-miss feedback
+// Shared color palette
+const c = {
+  bg: '#111113',
+  card: '#18181b',
+  cardHover: '#1f1f23',
+  border: '#27272a',
+  borderHover: '#3f3f46',
+  text: '#fafafa',
+  textMuted: '#a1a1aa',
+  textDim: '#71717a',
+  blue: '#3b82f6',
+  blueHover: '#2563eb',
+  blueBg: 'rgba(59, 130, 246, 0.1)',
+  purple: '#a855f7',
+  purpleBg: 'rgba(168, 85, 247, 0.1)',
+  orange: '#f97316',
+  orangeBg: 'rgba(249, 115, 22, 0.1)',
+  green: '#22c55e',
+  greenBg: 'rgba(34, 197, 94, 0.1)',
+  red: '#ef4444',
+  redBg: 'rgba(239, 68, 68, 0.1)',
+  yellow: '#eab308',
+  yellowBg: 'rgba(234, 179, 8, 0.15)',
 }
 
-// C++ focused question bank for CS fundamentals classes
+type Question = {
+  id: string
+  prompt: string
+  choices: string[]
+  answerIndex: number
+  hint?: string
+}
+
+type DeepThinkQuestion = {
+  id: string
+  prompt: string
+  code: string
+  choices: string[]
+  answerIndex: number
+  explanation: string
+}
+
 const MOCK_QUESTIONS: Question[] = [
-	{
-		id: 'q1',
-		prompt: 'What is the correct way to declare a constant in C++?',
-		choices: ['const int x = 5;', 'constant int x = 5;', 'int const x = 5;', 'Both A and C'],
-		answerIndex: 3,
-		hint: 'In C++, both "const int" and "int const" are valid ways to declare a constant.',
-	},
-	{
-		id: 'q2',
-		prompt: 'Which header file is needed for cout and cin?',
-		choices: ['<stdio.h>', '<iostream>', '<conio.h>', '<string>'],
-		answerIndex: 1,
-		hint: 'iostream provides input/output stream objects like cout and cin.',
-	},
-	{
-		id: 'q3',
-		prompt: 'What is the output of: cout << 5/2;',
-		choices: ['2.5', '2', '3', '2.0'],
-		answerIndex: 1,
-		hint: 'Integer division in C++ truncates the decimal part.',
-	},
-	{
-		id: 'q4',
-		prompt: 'Which operator is used to access members of a pointer to an object?',
-		choices: ['.', '->', '::', '*'],
-		answerIndex: 1,
-		hint: 'The arrow operator (->) is used to access members through a pointer.',
-	},
-	{
-		id: 'q5',
-		prompt: 'What does the & operator do when used in a variable declaration?',
-		choices: ['Bitwise AND', 'Address of', 'Creates a reference', 'Logical AND'],
-		answerIndex: 2,
-		hint: 'In declarations like "int& ref = x;", & creates a reference variable.',
-	},
-	{
-		id: 'q6',
-		prompt: 'What is the default access specifier for class members in C++?',
-		choices: ['public', 'private', 'protected', 'None'],
-		answerIndex: 1,
-		hint: 'Class members are private by default, unlike struct members which are public.',
-	},
-	{
-		id: 'q7',
-		prompt: 'Which keyword is used to allocate memory dynamically in C++?',
-		choices: ['malloc', 'new', 'alloc', 'create'],
-		answerIndex: 1,
-		hint: 'The "new" keyword allocates memory and calls the constructor.',
-	},
-	{
-		id: 'q8',
-		prompt: 'What is the correct way to declare a pointer to an integer?',
-		choices: ['int p*;', 'int *p;', '*int p;', 'pointer int p;'],
-		answerIndex: 1,
-		hint: 'The asterisk goes before the variable name: int *p;',
-	},
-	{
-		id: 'q9',
-		prompt: 'What does endl do in C++?',
-		choices: ['Ends the program', 'Inserts newline and flushes buffer', 'Ends the line only', 'Clears the screen'],
-		answerIndex: 1,
-		hint: 'endl inserts a newline AND flushes the output buffer.',
-	},
-	{
-		id: 'q10',
-		prompt: 'What is the size of int on most modern 64-bit systems?',
-		choices: ['2 bytes', '4 bytes', '8 bytes', 'Depends on compiler'],
-		answerIndex: 1,
-		hint: 'int is typically 4 bytes (32 bits) even on 64-bit systems.',
-	},
-	{
-		id: 'q11',
-		prompt: 'What is the correct syntax for a for loop in C++?',
-		choices: ['for (i = 0; i < 10; i++)', 'for (int i = 0; i < 10; i++)', 'for i in range(10)', 'foreach (int i in 10)'],
-		answerIndex: 1,
-		hint: 'C++ for loops require variable declaration, condition, and increment.',
-	},
-	{
-		id: 'q12',
-		prompt: 'What is a constructor in C++?',
-		choices: ['A function that destroys objects', 'A special function that initializes objects', 'A type of variable', 'A loop structure'],
-		answerIndex: 1,
-		hint: 'Constructors are called automatically when an object is created.',
-	},
-	{
-		id: 'q13',
-		prompt: 'What does the scope resolution operator (::) do?',
-		choices: ['Compares values', 'Accesses global or class scope', 'Creates a pointer', 'Defines a function'],
-		answerIndex: 1,
-		hint: 'The :: operator accesses namespaces, classes, or global scope.',
-	},
-	{
-		id: 'q14',
-		prompt: 'What is the correct way to pass an array to a function?',
-		choices: ['void func(int arr[])', 'void func(int[] arr)', 'void func(array int)', 'void func(int arr)'],
-		answerIndex: 0,
-		hint: 'Arrays are passed as pointers: int arr[] or int* arr.',
-	},
-	{
-		id: 'q15',
-		prompt: 'What does the keyword "virtual" do in C++?',
-		choices: ['Makes a variable constant', 'Enables runtime polymorphism', 'Creates a template', 'Declares a static member'],
-		answerIndex: 1,
-		hint: 'Virtual functions allow derived classes to override base class behavior.',
-	},
-	{
-		id: 'q16',
-		prompt: 'What is the difference between struct and class in C++?',
-		choices: ['No difference', 'Default access: struct is public, class is private', 'struct cannot have functions', 'class cannot inherit'],
-		answerIndex: 1,
-		hint: 'The only difference is the default access specifier.',
-	},
-	{
-		id: 'q17',
-		prompt: 'What happens when you delete a null pointer in C++?',
-		choices: ['Undefined behavior', 'Program crashes', 'Nothing (safe operation)', 'Compilation error'],
-		answerIndex: 2,
-		hint: 'Deleting a null pointer is safe and does nothing.',
-	},
-	{
-		id: 'q18',
-		prompt: 'What is the output of: cout << (5 > 3 ? "Yes" : "No");',
-		choices: ['5 > 3', 'Yes', 'No', 'true'],
-		answerIndex: 1,
-		hint: 'The ternary operator returns the second value if condition is true.',
-	},
-	{
-		id: 'q19',
-		prompt: 'Which keyword is used to prevent a class from being inherited?',
-		choices: ['static', 'const', 'final', 'sealed'],
-		answerIndex: 2,
-		hint: 'C++11 introduced the "final" keyword to prevent inheritance.',
-	},
-	{
-		id: 'q20',
-		prompt: 'What is the correct way to declare a vector of integers?',
-		choices: ['vector int v;', 'int vector v;', 'vector<int> v;', 'vector[int] v;'],
-		answerIndex: 2,
-		hint: 'Vectors use angle brackets for template parameters: vector<int>.',
-	},
-	{
-		id: 'q21',
-		prompt: 'What does the "static" keyword mean for a class member?',
-		choices: ['Cannot be changed', 'Shared by all instances', 'Private only', 'Cannot be inherited'],
-		answerIndex: 1,
-		hint: 'Static members belong to the class, not individual objects.',
-	},
-	{
-		id: 'q22',
-		prompt: 'What is the output of: cout << sizeof(char);',
-		choices: ['1', '2', '4', 'Undefined'],
-		answerIndex: 0,
-		hint: 'char is always 1 byte by definition in C++.',
-	},
-	{
-		id: 'q23',
-		prompt: 'What is a destructor in C++?',
-		choices: ['A function that creates objects', 'A function that cleans up when object is destroyed', 'A type of constructor', 'A static function'],
-		answerIndex: 1,
-		hint: 'Destructors (prefixed with ~) are called when objects go out of scope.',
-	},
-	{
-		id: 'q24',
-		prompt: 'What is the purpose of the "this" pointer?',
-		choices: ['Points to the current function', 'Points to the current object', 'Points to the parent class', 'Points to null'],
-		answerIndex: 1,
-		hint: 'The "this" pointer holds the address of the current object.',
-	},
-	{
-		id: 'q25',
-		prompt: 'What is function overloading?',
-		choices: ['Calling a function too many times', 'Multiple functions with same name but different parameters', 'Overriding a base class function', 'Using recursion'],
-		answerIndex: 1,
-		hint: 'Overloading allows functions with the same name but different signatures.',
-	},
-	{
-		id: 'q26',
-		prompt: 'What does "cin >> x;" do?',
-		choices: ['Outputs x', 'Inputs a value into x', 'Compares cin and x', 'Shifts bits'],
-		answerIndex: 1,
-		hint: 'The extraction operator >> reads input from cin into the variable.',
-	},
-	{
-		id: 'q27',
-		prompt: 'What is the difference between ++i and i++?',
-		choices: ['No difference', '++i is pre-increment, i++ is post-increment', '++i is invalid', 'i++ is faster'],
-		answerIndex: 1,
-		hint: 'Pre-increment (++i) increments first, post-increment (i++) uses then increments.',
-	},
-	{
-		id: 'q28',
-		prompt: 'What header is needed to use strings in C++?',
-		choices: ['<string.h>', '<string>', '<strings>', '<cstring>'],
-		answerIndex: 1,
-		hint: 'The C++ string class is in <string>, while <cstring> has C-style string functions.',
-	},
-	{
-		id: 'q29',
-		prompt: 'What is a null pointer in C++11 and later?',
-		choices: ['NULL', '0', 'nullptr', 'All of the above'],
-		answerIndex: 2,
-		hint: 'nullptr is the preferred null pointer constant in modern C++.',
-	},
-	{
-		id: 'q30',
-		prompt: 'What does "using namespace std;" do?',
-		choices: ['Imports the standard library', 'Allows using std members without std:: prefix', 'Creates a namespace', 'Defines a macro'],
-		answerIndex: 1,
-		hint: 'This directive lets you use cout instead of std::cout.',
-	},
-	{
-		id: 'q31',
-		prompt: 'What is the output of: int x = 10; cout << x++;',
-		choices: ['10', '11', '9', 'Undefined'],
-		answerIndex: 0,
-		hint: 'Post-increment returns the original value, then increments.',
-	},
-	{
-		id: 'q32',
-		prompt: 'What is an abstract class in C++?',
-		choices: ['A class with no members', 'A class with at least one pure virtual function', 'A class that cannot have objects', 'Both B and C'],
-		answerIndex: 3,
-		hint: 'Abstract classes have pure virtual functions and cannot be instantiated.',
-	},
-	{
-		id: 'q33',
-		prompt: 'What is the purpose of the "friend" keyword?',
-		choices: ['Creates a linked class', 'Allows access to private members', 'Inherits from a class', 'Defines a template'],
-		answerIndex: 1,
-		hint: 'Friend functions/classes can access private members of a class.',
-	},
-	{
-		id: 'q34',
-		prompt: 'How do you dynamically allocate an array of 10 integers?',
-		choices: ['int arr = new int[10];', 'int* arr = new int[10];', 'int arr[10] = new;', 'new int arr[10];'],
-		answerIndex: 1,
-		hint: 'Dynamic arrays require a pointer: int* arr = new int[10];',
-	},
-	{
-		id: 'q35',
-		prompt: 'What is the correct way to free dynamically allocated array memory?',
-		choices: ['delete arr;', 'delete[] arr;', 'free(arr);', 'remove arr;'],
-		answerIndex: 1,
-		hint: 'Use delete[] for arrays, delete for single objects.',
-	},
+  { id: 'q1', prompt: 'What is the correct way to declare a constant in C++?', choices: ['const int x = 5;', 'constant int x = 5;', 'int const x = 5;', 'Both A and C'], answerIndex: 3, hint: 'Both "const int" and "int const" are valid.' },
+  { id: 'q2', prompt: 'Which header file is needed for cout and cin?', choices: ['<stdio.h>', '<iostream>', '<conio.h>', '<string>'], answerIndex: 1, hint: 'iostream provides input/output stream objects.' },
+  { id: 'q3', prompt: 'What is the output of: cout << 5/2;', choices: ['2.5', '2', '3', '2.0'], answerIndex: 1, hint: 'Integer division truncates the decimal.' },
+  { id: 'q4', prompt: 'Which operator accesses members of a pointer to an object?', choices: ['.', '->', '::', '*'], answerIndex: 1, hint: 'Arrow operator (->) for pointer member access.' },
+  { id: 'q5', prompt: 'What does & do in a variable declaration?', choices: ['Bitwise AND', 'Address of', 'Creates a reference', 'Logical AND'], answerIndex: 2, hint: 'In declarations, & creates a reference variable.' },
+  { id: 'q6', prompt: 'Default access specifier for class members?', choices: ['public', 'private', 'protected', 'None'], answerIndex: 1, hint: 'Class members are private by default.' },
+  { id: 'q7', prompt: 'Keyword for dynamic memory allocation?', choices: ['malloc', 'new', 'alloc', 'create'], answerIndex: 1, hint: '"new" allocates memory and calls constructor.' },
+  { id: 'q8', prompt: 'Correct pointer declaration?', choices: ['int p*;', 'int *p;', '*int p;', 'pointer int p;'], answerIndex: 1, hint: 'Asterisk before variable name: int *p;' },
+  { id: 'q9', prompt: 'What does endl do?', choices: ['Ends program', 'Newline + flush buffer', 'Ends line only', 'Clears screen'], answerIndex: 1, hint: 'endl inserts newline AND flushes buffer.' },
+  { id: 'q10', prompt: 'Size of int on 64-bit systems?', choices: ['2 bytes', '4 bytes', '8 bytes', 'Depends'], answerIndex: 1, hint: 'int is typically 4 bytes even on 64-bit.' },
+  { id: 'q11', prompt: 'Correct for loop syntax?', choices: ['for (i = 0; i < 10; i++)', 'for (int i = 0; i < 10; i++)', 'for i in range(10)', 'foreach (int i in 10)'], answerIndex: 1, hint: 'C++ requires variable declaration in for loop.' },
+  { id: 'q12', prompt: 'What is a constructor?', choices: ['Destroys objects', 'Initializes objects', 'A variable type', 'A loop'], answerIndex: 1, hint: 'Constructors initialize objects on creation.' },
+  { id: 'q13', prompt: 'What does :: do?', choices: ['Compares values', 'Accesses scope', 'Creates pointer', 'Defines function'], answerIndex: 1, hint: ':: accesses namespaces, classes, or global scope.' },
+  { id: 'q14', prompt: 'Pass array to function?', choices: ['void func(int arr[])', 'void func(int[] arr)', 'void func(array int)', 'void func(int arr)'], answerIndex: 0, hint: 'Arrays passed as pointers: int arr[] or int* arr.' },
+  { id: 'q15', prompt: 'What does "virtual" do?', choices: ['Makes constant', 'Enables polymorphism', 'Creates template', 'Declares static'], answerIndex: 1, hint: 'Virtual enables runtime polymorphism.' },
+  { id: 'q16', prompt: 'struct vs class difference?', choices: ['No difference', 'Default access differs', 'struct no functions', 'class no inherit'], answerIndex: 1, hint: 'Only difference is default access specifier.' },
+  { id: 'q17', prompt: 'Delete null pointer?', choices: ['Undefined', 'Crashes', 'Safe (nothing)', 'Compile error'], answerIndex: 2, hint: 'Deleting null pointer is safe.' },
+  { id: 'q18', prompt: 'Output of: cout << (5 > 3 ? "Yes" : "No");', choices: ['5 > 3', 'Yes', 'No', 'true'], answerIndex: 1, hint: 'Ternary returns second value if true.' },
+  { id: 'q19', prompt: 'Prevent class inheritance?', choices: ['static', 'const', 'final', 'sealed'], answerIndex: 2, hint: 'C++11 "final" prevents inheritance.' },
+  { id: 'q20', prompt: 'Declare vector of integers?', choices: ['vector int v;', 'int vector v;', 'vector<int> v;', 'vector[int] v;'], answerIndex: 2, hint: 'Vectors use angle brackets: vector<int>.' },
 ]
 
-type Toast = {
-	id: number
-	message: string
-	type: 'success' | 'info' | 'warning'
-}
+const DEEP_THINK_QUESTIONS: DeepThinkQuestion[] = [
+  { id: 'dt1', prompt: 'What is the output?', code: `int x = 5;\ncout << x++ << " " << ++x;`, choices: ['5 7', '6 7', '5 6', 'Undefined behavior'], answerIndex: 3, explanation: 'Order of evaluation is unspecified - undefined behavior!' },
+  { id: 'dt2', prompt: 'What will this print?', code: `int arr[] = {1, 2, 3, 4, 5};\nint* p = arr;\ncout << *(p + 2);`, choices: ['1', '2', '3', '4'], answerIndex: 2, explanation: 'p + 2 moves 2 elements forward. *(p+2) = arr[2] = 3.' },
+  { id: 'dt3', prompt: 'What is the output?', code: `int a = 10, b = 20;\nint& ref = a;\nref = b;\ncout << a << " " << b;`, choices: ['10 20', '20 20', '10 10', '20 10'], answerIndex: 1, explanation: 'ref is alias for a. Assigning b to ref assigns 20 to a.' },
+  { id: 'dt4', prompt: 'What does this output?', code: `for(int i = 0; i < 5; i++) {\n  if(i == 2) continue;\n  if(i == 4) break;\n  cout << i << " ";\n}`, choices: ['0 1 2 3 4', '0 1 3', '0 1 2 3', '0 1 3 4'], answerIndex: 1, explanation: 'continue skips i=2, break exits at i=4. Output: 0 1 3' },
+  { id: 'dt5', prompt: 'What is printed?', code: `int x = 5;\nint* p = &x;\nint** pp = &p;\ncout << **pp;`, choices: ['Address of x', 'Address of p', '5', 'Error'], answerIndex: 2, explanation: '**pp dereferences twice to get x value: 5.' },
+  { id: 'dt6', prompt: 'What is the output?', code: `class Base {\npublic:\n  virtual void show() { cout << "Base"; }\n};\nclass Derived : public Base {\npublic:\n  void show() { cout << "Derived"; }\n};\nBase* ptr = new Derived();\nptr->show();`, choices: ['Base', 'Derived', 'BaseDerived', 'Error'], answerIndex: 1, explanation: 'Virtual function + derived object = Derived::show() called.' },
+  { id: 'dt7', prompt: 'What will be printed?', code: `int arr[3] = {10, 20, 30};\ncout << 2[arr];`, choices: ['20', '30', 'Error', '2'], answerIndex: 1, explanation: '2[arr] = *(2+arr) = *(arr+2) = arr[2] = 30.' },
+  { id: 'dt8', prompt: 'What is the output?', code: `int i = 0;\nwhile(i++ < 3) {\n  cout << i << " ";\n}`, choices: ['0 1 2', '1 2 3', '0 1 2 3', '1 2 3 4'], answerIndex: 1, explanation: 'Post-increment: compare then increment. Prints 1 2 3.' },
+]
 
 type SessionState = {
-	currentQuestionIndex: number
-	questionsAnswered: number
-	correctAnswersThisSession: number
-	currentStreak: number
-	bestStreakThisSession: number
-	sessionLength: number
-	startTime: number
-	elapsedTime: number
-	isActive: boolean
+  currentQuestionIndex: number
+  questionsAnswered: number
+  correctAnswersThisSession: number
+  currentStreak: number
+  bestStreakThisSession: number
+  sessionLength: number
+  startTime: number
+  elapsedTime: number
+  isActive: boolean
 }
 
 function Speedrun() {
-	// Session setup state
-	const [sessionStarted, setSessionStarted] = useState(false)
-	const [sessionLength, setSessionLength] = useState(20)
-	const [timeMode, setTimeMode] = useState<'quick' | 'deep'>('quick') // 5s or 15s per question
-	const timerDuration = timeMode === 'quick' ? 5 : 15
-	const xpPerQuestion = timeMode === 'quick' ? 10 : 25
-	
-	// Session state
-	const [sessionState, setSessionState] = useState<SessionState>({
-		currentQuestionIndex: 0,
-		questionsAnswered: 0,
-		correctAnswersThisSession: 0,
-		currentStreak: 0,
-		bestStreakThisSession: 0,
-		sessionLength: 20,
-		startTime: 0,
-		elapsedTime: 0,
-		isActive: false,
-	})
-	
-	// Question state
-	const [timeLeft, setTimeLeft] = useState(10)
-	const [selected, setSelected] = useState<number | null>(null)
-	const [locked, setLocked] = useState(false)
-	const [showSummary, setShowSummary] = useState(false)
-	const [showExitConfirm, setShowExitConfirm] = useState(false)
-	
-	// User stats
-	const [userStats, setUserStats] = useState(getCurrentUserStats())
-	
-	// UI state
-	const [toasts, setToasts] = useState<Toast[]>([])
-	const [streakBroken, setStreakBroken] = useState(false)
-	const [previousStreak, setPreviousStreak] = useState(0)
-	
-	const toastIdRef = useRef(0)
-	const timerIntervalRef = useRef<number | null>(null)
-	const elapsedTimeIntervalRef = useRef<number | null>(null)
-	
-	// Get questions for this session (cycle through if needed)
-	const sessionQuestions = useMemo(() => {
-		const questions: Question[] = []
-		for (let i = 0; i < sessionState.sessionLength; i++) {
-			questions.push(MOCK_QUESTIONS[i % MOCK_QUESTIONS.length])
-		}
-		return questions
-	}, [sessionState.sessionLength])
-	
-	const currentQuestion = sessionQuestions[sessionState.currentQuestionIndex]
-	
-	// Update user stats when they change
-	useEffect(() => {
-		setUserStats(getCurrentUserStats())
-	}, [sessionState.questionsAnswered])
-	
-	// Timer for each question
-	useEffect(() => {
-		if (!sessionState.isActive || locked) return
-		setTimeLeft(timerDuration)
-		if (timerIntervalRef.current) clearInterval(timerIntervalRef.current)
-		
-		timerIntervalRef.current = window.setInterval(() => {
-			setTimeLeft((t) => {
-				if (t <= 1) {
-					if (timerIntervalRef.current) clearInterval(timerIntervalRef.current)
-					setLocked(true)
-					playWarning() // Play warning when time runs out
-					return 0
-				}
-				// Play warning sound at 3 seconds remaining
-				if (t === 4) {
-					playWarning()
-				}
-				return t - 1
-			})
-		}, 1000)
-		
-		return () => {
-			if (timerIntervalRef.current) clearInterval(timerIntervalRef.current)
-		}
-	}, [sessionState.currentQuestionIndex, locked, sessionState.isActive, timerDuration])
-	
-	// Track elapsed time
-	useEffect(() => {
-		if (!sessionState.isActive) return
-		
-		elapsedTimeIntervalRef.current = window.setInterval(() => {
-			setSessionState((prev) => ({
-				...prev,
-				elapsedTime: Math.floor((Date.now() - prev.startTime) / 1000),
-			}))
-		}, 1000)
-		
-		return () => {
-			if (elapsedTimeIntervalRef.current) clearInterval(elapsedTimeIntervalRef.current)
-		}
-	}, [sessionState.isActive, sessionState.startTime])
-	
-	// Auto-dismiss toasts
-	useEffect(() => {
-		if (toasts.length === 0) return
-		const timer = setTimeout(() => {
-			setToasts((prev) => prev.slice(1))
-		}, 3000)
-		return () => clearTimeout(timer)
-	}, [toasts])
-	
-	// Check for milestone rewards
-	useEffect(() => {
-		if (!sessionState.isActive) return
-		
-		const { currentStreak, questionsAnswered } = sessionState
-		
-		// Streak milestones
-		if (currentStreak === 3 && currentStreak > previousStreak) {
-			showToast('🔥 3-streak! Keep it going!', 'success')
-		} else if (currentStreak === 5 && currentStreak > previousStreak) {
-			showToast('🔥🔥 5-streak! Amazing!', 'success')
-		} else if (currentStreak === 10 && currentStreak > previousStreak) {
-			showToast('🔥🔥🔥 10-streak! Incredible!', 'success')
-		}
-		
-		// Question milestones
-		if (questionsAnswered > 0 && questionsAnswered % 10 === 0) {
-			showToast(`+${questionsAnswered} completed! 🎉`, 'info')
-		}
-		
-		// Goal-gradient effect at 75%
-		if (questionsAnswered === Math.ceil(sessionState.sessionLength * 0.75)) {
-			showToast('Almost there — finish strong! 💪', 'info')
-		}
-	}, [sessionState.currentStreak, sessionState.questionsAnswered, sessionState.isActive, previousStreak])
-	
-	const showToast = (message: string, type: 'success' | 'info' | 'warning' = 'info') => {
-		const id = toastIdRef.current++
-		setToasts((prev) => [...prev, { id, message, type }])
-	}
-	
-	const startSession = () => {
-		const startTime = Date.now()
-		setSessionState({
-			currentQuestionIndex: 0,
-			questionsAnswered: 0,
-			correctAnswersThisSession: 0,
-			currentStreak: 0,
-			bestStreakThisSession: 0,
-			sessionLength,
-			startTime,
-			elapsedTime: 0,
-			isActive: true,
-		})
-		setSessionStarted(true)
-		setSelected(null)
-		setLocked(false)
-		setTimeLeft(timerDuration)
-		setStreakBroken(false)
-		setPreviousStreak(0)
-	}
-	
-	const handleAnswer = async (i: number) => {
-		if (locked || !sessionState.isActive) return
-		setSelected(i)
-		setLocked(true)
-		
-		const isCorrect = i === currentQuestion.answerIndex
-		
-		let newStreak = sessionState.currentStreak
-		let newCorrect = sessionState.correctAnswersThisSession
-		
-		if (isCorrect) {
-			newStreak = sessionState.currentStreak + 1
-			newCorrect = sessionState.correctAnswersThisSession + 1
-			
-			// Play appropriate sound based on streak
-			if (newStreak >= 5 && newStreak % 5 === 0) {
-				playStreak() // Big streak milestone
-			} else {
-				playSuccess() // Regular correct answer
-			}
-		} else {
-			// Loss aversion: Show streak break feedback
-			playFail()
-			if (sessionState.currentStreak > 0) {
-				setStreakBroken(true)
-				setPreviousStreak(sessionState.currentStreak)
-				setTimeout(() => setStreakBroken(false), 3000)
-			}
-			newStreak = 0
-		}
-		
-		const newBestStreak = Math.max(sessionState.bestStreakThisSession, newStreak)
-		
-		setSessionState((prev) => ({
-			...prev,
-			questionsAnswered: prev.questionsAnswered + 1,
-			correctAnswersThisSession: newCorrect,
-			currentStreak: newStreak,
-			bestStreakThisSession: newBestStreak,
-		}))
-		
-		// Record answer for stats
-		await recordAnswer(isCorrect, newStreak)
-		
-		// Check if session is complete
-		if (sessionState.questionsAnswered + 1 >= sessionState.sessionLength) {
-			setTimeout(() => {
-				setShowSummary(true)
-				setSessionState((prev) => ({ ...prev, isActive: false }))
-			}, 2000)
-		}
-	}
-	
-	const next = () => {
-		if (sessionState.questionsAnswered >= sessionState.sessionLength) {
-			setShowSummary(true)
-			setSessionState((prev) => ({ ...prev, isActive: false }))
-			return
-		}
-		
-		setSelected(null)
-		setLocked(false)
-		setSessionState((prev) => ({
-			...prev,
-			currentQuestionIndex: (prev.currentQuestionIndex + 1) % sessionQuestions.length,
-		}))
-	}
-	
-	const handleExit = () => {
-		if (sessionState.questionsAnswered > 0 && sessionState.questionsAnswered < sessionState.sessionLength) {
-			setShowExitConfirm(true)
-		} else {
-			resetSession()
-		}
-	}
-	
-	const resetSession = () => {
-		setSessionStarted(false)
-		setShowSummary(false)
-		setShowExitConfirm(false)
-		setSelected(null)
-		setLocked(false)
-		setSessionState({
-			currentQuestionIndex: 0,
-			questionsAnswered: 0,
-			correctAnswersThisSession: 0,
-			currentStreak: 0,
-			bestStreakThisSession: 0,
-			sessionLength: 20,
-			startTime: 0,
-			elapsedTime: 0,
-			isActive: false,
-		})
-		if (timerIntervalRef.current) clearInterval(timerIntervalRef.current)
-		if (elapsedTimeIntervalRef.current) clearInterval(elapsedTimeIntervalRef.current)
-	}
-	
-	const progress = useMemo(() => {
-		if (sessionState.sessionLength === 0) return 0
-		return (sessionState.questionsAnswered / sessionState.sessionLength) * 100
-	}, [sessionState.questionsAnswered, sessionState.sessionLength])
-	
-	const sessionAccuracy = useMemo(() => {
-		if (sessionState.questionsAnswered === 0) return 0
-		return Math.round((sessionState.correctAnswersThisSession / sessionState.questionsAnswered) * 100)
-	}, [sessionState.correctAnswersThisSession, sessionState.questionsAnswered])
-	
-	const formatTime = (seconds: number) => {
-		const m = Math.floor(seconds / 60)
-		const s = seconds % 60
-		return `${m}:${s.toString().padStart(2, '0')}`
-	}
-	
-	// Session setup screen
-	if (!sessionStarted) {
-		return (
-			<div className="mx-auto max-w-2xl p-6 space-y-6">
-				<div className="text-center space-y-2">
-					<h1 className="text-3xl font-bold bg-gradient-to-r from-orange-500 to-red-500 bg-clip-text text-transparent">🎯 C++ Flashcard Speedrun</h1>
-					<p className="text-neutral-600 dark:text-neutral-400">
-						Test your C++ knowledge with rapid-fire questions. Build streaks, beat your best, and climb the leaderboard!
-					</p>
-				</div>
-				
-				<div className="border rounded-xl p-6 space-y-5 bg-white dark:bg-neutral-900 shadow-lg">
-					{/* Time Mode Toggle - NEW! */}
-					<div>
-						<label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-3">
-							Choose Speed Mode
-						</label>
-						<div className="grid grid-cols-2 gap-3">
-							<button
-								type="button"
-								onClick={() => setTimeMode('quick')}
-								className={`px-4 py-4 border-2 rounded-xl font-medium transition-all cursor-pointer touch-manipulation active:scale-95 ${
-									timeMode === 'quick'
-										? 'border-orange-500 bg-gradient-to-br from-orange-50 to-red-50 dark:from-orange-900/30 dark:to-red-900/30 text-orange-700 dark:text-orange-300 shadow-md'
-										: 'border-neutral-300 dark:border-neutral-600 hover:bg-neutral-50 dark:hover:bg-neutral-800'
-								}`}
-							>
-								<div className="text-2xl mb-1">⚡</div>
-								<div className="font-bold">Quick Recall</div>
-								<div className="text-xs opacity-75">5 seconds • +{10} XP</div>
-							</button>
-							<button
-								type="button"
-								onClick={() => setTimeMode('deep')}
-								className={`px-4 py-4 border-2 rounded-xl font-medium transition-all cursor-pointer touch-manipulation active:scale-95 ${
-									timeMode === 'deep'
-										? 'border-purple-500 bg-gradient-to-br from-purple-50 to-blue-50 dark:from-purple-900/30 dark:to-blue-900/30 text-purple-700 dark:text-purple-300 shadow-md'
-										: 'border-neutral-300 dark:border-neutral-600 hover:bg-neutral-50 dark:hover:bg-neutral-800'
-								}`}
-							>
-								<div className="text-2xl mb-1">🧠</div>
-								<div className="font-bold">Deep Think</div>
-								<div className="text-xs opacity-75">15 seconds • +{25} XP</div>
-							</button>
-						</div>
-					</div>
+  const [sessionStarted, setSessionStarted] = useState(false)
+  const [sessionLength, setSessionLength] = useState(20)
+  const [timeMode, setTimeMode] = useState<'quick' | 'deep'>('quick')
+  const timerDuration = timeMode === 'quick' ? 5 : 15
+  const xpPerQuestion = timeMode === 'quick' ? 10 : 25
 
-					<div>
-						<label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-3">
-							Choose Session Length
-						</label>
-						<div className="grid grid-cols-3 gap-3">
-							{[10, 20, 30].map((length) => (
-								<button
-									key={length}
-									type="button"
-									onClick={() => setSessionLength(length)}
-									className={`px-4 py-3 border-2 rounded-lg font-medium transition-all cursor-pointer touch-manipulation active:scale-95 ${
-										sessionLength === length
-											? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
-											: 'border-neutral-300 dark:border-neutral-600 hover:bg-neutral-50 dark:hover:bg-neutral-800'
-									}`}
-								>
-									{length} Questions
-								</button>
-							))}
-						</div>
-					</div>
-					
-					<div className={`rounded-lg p-4 border ${timeMode === 'quick' ? 'bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800' : 'bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800'}`}>
-						<p className={`text-sm ${timeMode === 'quick' ? 'text-orange-800 dark:text-orange-200' : 'text-purple-800 dark:text-purple-200'}`}>
-							<strong>⏱️ Mode:</strong> {timeMode === 'quick' ? 'Quick Recall (5s)' : 'Deep Think (15s)'} • <strong>Potential XP:</strong> {sessionLength * xpPerQuestion}
-						</p>
-						<p className={`text-xs mt-1 ${timeMode === 'quick' ? 'text-orange-700 dark:text-orange-300' : 'text-purple-700 dark:text-purple-300'}`}>
-							{timeMode === 'quick' ? 'Fast recall builds muscle memory. Great for review!' : 'More time to think through complex concepts. Higher rewards!'}
-						</p>
-					</div>
-					
-					{userStats.totalQuestions > 0 && (
-						<div className="bg-neutral-50 dark:bg-neutral-800 rounded-lg p-4 space-y-2">
-							<p className="text-sm font-medium text-neutral-700 dark:text-neutral-300">Your Stats</p>
-							<div className="grid grid-cols-3 gap-2 text-sm">
-								<div>
-									<span className="text-neutral-500 dark:text-neutral-400">Best Streak:</span>{' '}
-									<span className="font-semibold">🔥 {userStats.streak}</span>
-								</div>
-								<div>
-									<span className="text-neutral-500 dark:text-neutral-400">Accuracy:</span>{' '}
-									<span className="font-semibold">{userStats.accuracy}%</span>
-								</div>
-								<div>
-									<span className="text-neutral-500 dark:text-neutral-400">Total XP:</span>{' '}
-									<span className="font-semibold">{userStats.correctAnswers * 10}</span>
-								</div>
-							</div>
-						</div>
-					)}
-					
-					{/* Best Today Badge */}
-					{userStats.streak >= 3 && (
-						<div className="bg-gradient-to-r from-yellow-50 to-orange-50 dark:from-yellow-900/20 dark:to-orange-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-3 flex items-center gap-3">
-							<span className="text-2xl">🏆</span>
-							<div>
-								<p className="text-sm font-semibold text-yellow-800 dark:text-yellow-200">Best Today: {userStats.streak} streak!</p>
-								<p className="text-xs text-yellow-700 dark:text-yellow-300">Can you beat it this session?</p>
-							</div>
-						</div>
-					)}
-					
-					<button
-						type="button"
-						onClick={startSession}
-						className={`w-full px-6 py-4 rounded-xl text-lg font-bold transition-all cursor-pointer touch-manipulation active:scale-95 shadow-lg text-white ${
-							timeMode === 'quick' 
-								? 'bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600' 
-								: 'bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600'
-						}`}
-					>
-						🚀 Start {timeMode === 'quick' ? 'Quick' : 'Deep'} Speedrun
-					</button>
-				</div>
-			</div>
-		)
-	}
-	
-	// Summary modal
-	if (showSummary) {
-		const isNewBestStreak = sessionState.bestStreakThisSession > (userStats.streak || 0)
-		const streakDiff = (userStats.streak || 0) - sessionState.bestStreakThisSession
-		
-		return (
-			<div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 backdrop-blur-sm">
-				<div className="bg-white dark:bg-neutral-900 rounded-xl p-8 max-w-lg w-full mx-4 border-2 border-blue-200 dark:border-blue-800 shadow-2xl">
-					<h2 className="text-2xl font-bold mb-4 text-neutral-900 dark:text-neutral-100">📊 Session Summary</h2>
-					
-					<div className="space-y-4 mb-6">
-						<div className="grid grid-cols-2 gap-4">
-							<div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
-								<div className="text-xs text-blue-600 dark:text-blue-400 font-medium mb-1">Questions Answered</div>
-								<div className="text-2xl font-bold text-blue-900 dark:text-blue-100">
-									{sessionState.questionsAnswered}
-								</div>
-							</div>
-							<div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-4">
-								<div className="text-xs text-green-600 dark:text-green-400 font-medium mb-1">Correct Answers</div>
-								<div className="text-2xl font-bold text-green-900 dark:text-green-100">
-									{sessionState.correctAnswersThisSession}
-								</div>
-							</div>
-							<div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-4">
-								<div className="text-xs text-purple-600 dark:text-purple-400 font-medium mb-1">Session Accuracy</div>
-								<div className="text-2xl font-bold text-purple-900 dark:text-purple-100">
-									{sessionAccuracy}%
-								</div>
-							</div>
-							<div className="bg-orange-50 dark:bg-orange-900/20 rounded-lg p-4">
-								<div className="text-xs text-orange-600 dark:text-orange-400 font-medium mb-1">Best Streak</div>
-								<div className="text-2xl font-bold text-orange-900 dark:text-orange-100">
-									{sessionState.bestStreakThisSession}
-								</div>
-							</div>
-						</div>
-						
-						<div className="bg-neutral-50 dark:bg-neutral-800 rounded-lg p-4">
-							<div className="text-xs text-neutral-500 dark:text-neutral-400 font-medium mb-1">Time Spent</div>
-							<div className="text-lg font-semibold text-neutral-900 dark:text-neutral-100">
-								{formatTime(sessionState.elapsedTime)}
-							</div>
-						</div>
-						
-						{isNewBestStreak && (
-							<div className="bg-yellow-50 dark:bg-yellow-900/20 border-2 border-yellow-300 dark:border-yellow-700 rounded-lg p-4">
-								<p className="text-sm font-semibold text-yellow-800 dark:text-yellow-200">
-									🔥 New personal best streak! ({sessionState.bestStreakThisSession})
-								</p>
-							</div>
-						)}
-						
-						{!isNewBestStreak && streakDiff > 0 && streakDiff <= 3 && (
-							<div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-								<p className="text-sm text-blue-800 dark:text-blue-200">
-									You were {streakDiff} {streakDiff === 1 ? 'question' : 'questions'} from beating your best streak ({userStats.streak}). Keep going!
-								</p>
-							</div>
-						)}
-					</div>
-					
-					<div className="flex gap-3">
-						<button
-							type="button"
-							onClick={() => {
-								resetSession()
-								startSession()
-							}}
-							className="flex-1 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white rounded-lg active:scale-95 transition-all cursor-pointer touch-manipulation text-sm font-semibold shadow-md"
-						>
-							🔄 Run Again
-						</button>
-						<button
-							type="button"
-							onClick={resetSession}
-							className="flex-1 px-4 py-2.5 border-2 border-neutral-300 dark:border-neutral-600 rounded-lg hover:bg-neutral-50 dark:hover:bg-neutral-800 active:scale-95 transition-all cursor-pointer touch-manipulation text-sm font-semibold text-neutral-700 dark:text-neutral-300"
-						>
-							Choose Topic
-						</button>
-					</div>
-				</div>
-			</div>
-		)
-	}
-	
-	// Exit confirmation dialog
-	if (showExitConfirm) {
-		return (
-			<div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 backdrop-blur-sm">
-				<div className="bg-white dark:bg-neutral-900 rounded-xl p-6 max-w-md w-full mx-4 border-2 border-orange-200 dark:border-orange-800 shadow-2xl">
-					<h3 className="text-lg font-bold mb-3 text-neutral-900 dark:text-neutral-100">⚠️ Exit Session?</h3>
-					<p className="text-sm text-neutral-600 dark:text-neutral-400 mb-4">
-						You've completed {sessionState.questionsAnswered}/{sessionState.sessionLength} questions. Are you sure you want to stop?
-					</p>
-					<div className="flex gap-3">
-						<button
-							type="button"
-							onClick={() => setShowExitConfirm(false)}
-							className="flex-1 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white rounded-lg active:scale-95 transition-all cursor-pointer touch-manipulation text-sm font-semibold"
-						>
-							Keep Going
-						</button>
-						<button
-							type="button"
-							onClick={resetSession}
-							className="flex-1 px-4 py-2.5 border-2 border-neutral-300 dark:border-neutral-600 rounded-lg hover:bg-neutral-50 dark:hover:bg-neutral-800 active:scale-95 transition-all cursor-pointer touch-manipulation text-sm font-semibold text-neutral-700 dark:text-neutral-300"
-						>
-							Exit
-						</button>
-					</div>
-				</div>
-			</div>
-		)
-	}
-	
-	// Main game screen
-	return (
-		<div className="mx-auto max-w-3xl p-4 space-y-4 relative">
-			{/* Toast notifications */}
-			<div className="fixed top-20 right-4 z-50 space-y-2">
-				{toasts.map((toast) => (
-					<div
-						key={toast.id}
-						className={`px-4 py-3 rounded-lg shadow-lg border-2 animate-pulse ${
-							toast.type === 'success'
-								? 'bg-green-50 dark:bg-green-900/30 border-green-300 dark:border-green-700 text-green-800 dark:text-green-200'
-								: toast.type === 'warning'
-								? 'bg-orange-50 dark:bg-orange-900/30 border-orange-300 dark:border-orange-700 text-orange-800 dark:text-orange-200'
-								: 'bg-blue-50 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700 text-blue-800 dark:text-blue-200'
-						}`}
-					>
-						<p className="text-sm font-medium">{toast.message}</p>
-					</div>
-				))}
-			</div>
-			
-			{/* Header */}
-			<div className="flex items-center justify-between bg-white dark:bg-neutral-900 rounded-lg border px-4 py-3 shadow-sm">
-				<div className="flex items-center gap-4">
-					<h1 className="text-xl font-semibold text-neutral-900 dark:text-neutral-100">C++ Speedrun</h1>
-					<span className={`text-xs px-2 py-1 rounded-full font-medium ${timeMode === 'quick' ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300' : 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300'}`}>
-						{timeMode === 'quick' ? '⚡ Quick' : '🧠 Deep'}
-					</span>
-					<button
-						type="button"
-						onClick={handleExit}
-						className="text-sm text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300 px-2 py-1"
-					>
-						Exit
-					</button>
-				</div>
-				<div className="flex items-center gap-4 text-sm">
-					{/* Streak display with loss aversion feedback */}
-					<div className={`px-3 py-1.5 rounded-full transition-all ${
-						streakBroken
-							? 'bg-red-100 dark:bg-red-900/30 border-2 border-red-300 dark:border-red-700 animate-pulse'
-							: 'bg-orange-100 dark:bg-orange-900/30'
-					}`}>
-						<span className="font-semibold text-orange-700 dark:text-orange-300">
-							🔥 Streak: {sessionState.currentStreak}
-						</span>
-						{sessionState.bestStreakThisSession > 0 && (
-							<span className="text-xs text-orange-600 dark:text-orange-400 ml-2">
-								(Best: {sessionState.bestStreakThisSession})
-							</span>
-						)}
-					</div>
-					<div className="text-neutral-600 dark:text-neutral-400">
-						Time: <span className="font-mono font-semibold">{formatTime(sessionState.elapsedTime)}</span>
-					</div>
-				</div>
-			</div>
-			
-			{/* Streak break feedback */}
-			{streakBroken && (
-				<div className="bg-red-50 dark:bg-red-900/20 border-2 border-red-300 dark:border-red-700 rounded-lg p-3 animate-pulse">
-					<p className="text-sm font-medium text-red-800 dark:text-red-200">
-						Your streak broke at {previousStreak}. {previousStreak >= sessionState.bestStreakThisSession 
-							? `You were close to your best (${sessionState.bestStreakThisSession}). Try again!`
-							: 'Keep going to beat your best!'}
-					</p>
-				</div>
-			)}
-			
-			{/* Goal-gradient progress bar */}
-			<div className="space-y-2">
-				<div className="flex items-center justify-between text-sm">
-					<span className="font-medium text-neutral-700 dark:text-neutral-300">
-						Progress: {sessionState.questionsAnswered} / {sessionState.sessionLength}
-					</span>
-					<span className="text-neutral-500 dark:text-neutral-400">
-						{Math.round(progress)}%
-					</span>
-				</div>
-				<div className="h-3 bg-neutral-200 dark:bg-neutral-800 rounded-full overflow-hidden">
-					<div
-						className={`h-full rounded-full transition-all duration-300 ${
-							progress >= 75
-								? 'bg-gradient-to-r from-green-500 to-blue-500'
-								: progress >= 50
-								? 'bg-gradient-to-r from-blue-500 to-purple-500'
-								: 'bg-blue-500'
-						}`}
-						style={{ width: `${progress}%` }}
-					/>
-				</div>
-				{progress >= 75 && progress < 100 && (
-					<p className="text-xs text-green-600 dark:text-green-400 font-medium animate-pulse">
-						Almost there — finish strong! 💪
-					</p>
-				)}
-			</div>
-			
-			{/* Question card */}
-			<div className="border rounded-lg p-6 bg-white dark:bg-neutral-900 shadow-sm">
-				<p className="font-medium text-lg mb-4">{currentQuestion.prompt}</p>
-				
-				{locked && selected !== null && (
-					<div className={`mb-4 p-4 rounded-lg border-2 ${
-						selected === currentQuestion.answerIndex
-							? 'bg-green-50 dark:bg-green-900/30 border-green-500 text-green-900 dark:text-green-100'
-							: 'bg-red-50 dark:bg-red-900/30 border-red-500 text-red-900 dark:text-red-100'
-					}`}>
-						<p className="font-semibold text-sm mb-2">
-							{selected === currentQuestion.answerIndex ? (
-								<span>✓ Correct! Great job!</span>
-							) : (
-								<span>✗ Incorrect. The correct answer is: <span className="font-bold">{currentQuestion.choices[currentQuestion.answerIndex]}</span></span>
-							)}
-						</p>
-						{selected !== currentQuestion.answerIndex && currentQuestion.hint && (
-							<p className="text-xs text-red-700 dark:text-red-300 mt-2 italic">
-								💡 {currentQuestion.hint}
-							</p>
-						)}
-						{selected !== currentQuestion.answerIndex && !currentQuestion.hint && (
-							<p className="text-xs text-red-700 dark:text-red-300 mt-2 italic">
-								Close! Many confuse these. Review the concept and try again next time!
-							</p>
-						)}
-					</div>
-				)}
-				
-				<div className="grid gap-3">
-					{currentQuestion.choices.map((c, i) => {
-						const isCorrect = locked && i === currentQuestion.answerIndex
-						const isWrong = locked && selected === i && i !== currentQuestion.answerIndex
-						return (
-							<button
-								key={i}
-								type="button"
-								disabled={locked}
-								onClick={() => handleAnswer(i)}
-								className={`text-left border-2 rounded-lg px-4 py-3 transition-all touch-manipulation cursor-pointer active:scale-95 relative ${
-									locked ? 'cursor-not-allowed' : 'hover:bg-neutral-50 dark:hover:bg-neutral-800'
-								} ${
-									isCorrect
-										? 'border-green-500 bg-green-50 dark:bg-green-900/30 text-green-900 dark:text-green-100'
-										: isWrong
-										? 'border-red-500 bg-red-50 dark:bg-red-900/30 text-red-900 dark:text-red-100'
-										: locked
-										? 'opacity-50 border-neutral-300 dark:border-neutral-600'
-										: 'border-neutral-300 dark:border-neutral-600'
-								}`}
-							>
-								<div className="flex items-center justify-between gap-2">
-									<span>{c}</span>
-									{locked && (
-										<span className="text-lg font-bold flex-shrink-0">
-											{isCorrect ? '✓' : isWrong ? '✗' : ''}
-										</span>
-									)}
-								</div>
-							</button>
-						)
-					})}
-				</div>
-				
-				<div className="mt-4 flex items-center justify-between text-sm">
-					<div className="flex items-center gap-4">
-						{/* Visual Timer Bar */}
-						<div className="flex items-center gap-2">
-							<span className="text-neutral-500">⏱️</span>
-							<div className="w-24 h-2 bg-neutral-200 dark:bg-neutral-700 rounded-full overflow-hidden">
-								<div 
-									className={`h-full rounded-full transition-all duration-200 ${
-										timeLeft <= 3 ? 'bg-red-500 animate-pulse' : timeLeft <= timerDuration * 0.5 ? 'bg-orange-500' : 'bg-green-500'
-									}`}
-									style={{ width: `${(timeLeft / timerDuration) * 100}%` }}
-								/>
-							</div>
-							<span className={`font-mono font-bold ${timeLeft <= 3 ? 'text-red-600 animate-pulse' : ''}`}>{timeLeft}s</span>
-						</div>
-						<div>Accuracy: <span className="font-semibold">{sessionAccuracy}%</span></div>
-						<div className="text-purple-600 dark:text-purple-400">+{xpPerQuestion} XP/correct</div>
-					</div>
-					<button
-						type="button"
-						onClick={next}
-						disabled={!locked}
-						className="px-4 py-2 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 disabled:bg-neutral-300 disabled:dark:bg-neutral-700 text-white rounded-lg font-medium transition-all cursor-pointer touch-manipulation disabled:cursor-not-allowed active:scale-95"
-					>
-						{sessionState.questionsAnswered >= sessionState.sessionLength ? 'Finish' : 'Next'}
-					</button>
-				</div>
-			</div>
-		</div>
-	)
+  const [sessionState, setSessionState] = useState<SessionState>({
+    currentQuestionIndex: 0, questionsAnswered: 0, correctAnswersThisSession: 0,
+    currentStreak: 0, bestStreakThisSession: 0, sessionLength: 20,
+    startTime: 0, elapsedTime: 0, isActive: false,
+  })
+
+  const [timeLeft, setTimeLeft] = useState(10)
+  const [selected, setSelected] = useState<number | null>(null)
+  const [locked, setLocked] = useState(false)
+  const [showSummary, setShowSummary] = useState(false)
+  const [showExitConfirm, setShowExitConfirm] = useState(false)
+  const [userStats, setUserStats] = useState(getCurrentUserStats())
+  const [streakBroken, setStreakBroken] = useState(false)
+  const [previousStreak, setPreviousStreak] = useState(0)
+  const [flashAnimation, setFlashAnimation] = useState<'correct' | 'wrong' | null>(null)
+
+  const timerIntervalRef = useRef<number | null>(null)
+  const elapsedTimeIntervalRef = useRef<number | null>(null)
+
+  const shuffleArray = <T,>(array: T[]): T[] => {
+    const shuffled = [...array]
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
+    }
+    return shuffled
+  }
+
+  const sessionQuestions = useMemo(() => {
+    if (timeMode === 'deep') {
+      return shuffleArray(DEEP_THINK_QUESTIONS).slice(0, Math.min(sessionState.sessionLength, DEEP_THINK_QUESTIONS.length))
+    }
+    const shuffled = shuffleArray(MOCK_QUESTIONS)
+    return Array.from({ length: sessionState.sessionLength }, (_, i) => shuffled[i % shuffled.length])
+  }, [sessionState.sessionLength, timeMode])
+
+  const currentQuestion = sessionQuestions[sessionState.currentQuestionIndex]
+  const isDeepThink = timeMode === 'deep'
+  const currentDeepQuestion = isDeepThink ? (currentQuestion as DeepThinkQuestion) : null
+
+  useEffect(() => { setUserStats(getCurrentUserStats()) }, [sessionState.questionsAnswered])
+
+  useEffect(() => {
+    if (!sessionState.isActive || locked) return
+    setTimeLeft(timerDuration)
+    if (timerIntervalRef.current) clearInterval(timerIntervalRef.current)
+    timerIntervalRef.current = window.setInterval(() => {
+      setTimeLeft((t) => {
+        if (t <= 1) { if (timerIntervalRef.current) clearInterval(timerIntervalRef.current); handleTimeOut(); return 0 }
+        if (t === 4) playWarning()
+        return t - 1
+      })
+    }, 1000)
+    return () => { if (timerIntervalRef.current) clearInterval(timerIntervalRef.current) }
+  }, [sessionState.currentQuestionIndex, locked, sessionState.isActive, timerDuration])
+
+  useEffect(() => {
+    if (!sessionState.isActive) return
+    elapsedTimeIntervalRef.current = window.setInterval(() => {
+      setSessionState((prev) => ({ ...prev, elapsedTime: Math.floor((Date.now() - prev.startTime) / 1000) }))
+    }, 1000)
+    return () => { if (elapsedTimeIntervalRef.current) clearInterval(elapsedTimeIntervalRef.current) }
+  }, [sessionState.isActive, sessionState.startTime])
+
+  const startSession = () => {
+    setSessionState({
+      currentQuestionIndex: 0, questionsAnswered: 0, correctAnswersThisSession: 0,
+      currentStreak: 0, bestStreakThisSession: 0, sessionLength,
+      startTime: Date.now(), elapsedTime: 0, isActive: true,
+    })
+    setSessionStarted(true)
+    setSelected(null)
+    setLocked(false)
+    setTimeLeft(timerDuration)
+    setStreakBroken(false)
+    setPreviousStreak(0)
+  }
+
+  const handleAnswer = async (i: number) => {
+    if (locked || !sessionState.isActive) return
+    setSelected(i)
+    setLocked(true)
+    const isCorrect = i === currentQuestion.answerIndex
+    let newStreak = sessionState.currentStreak
+    let newCorrect = sessionState.correctAnswersThisSession
+
+    if (isCorrect) {
+      newStreak++; newCorrect++
+      setFlashAnimation('correct')
+      if (newStreak >= 5 && newStreak % 5 === 0) playStreak(); else playSuccess()
+    } else {
+      setFlashAnimation('wrong')
+      playFail()
+      if (sessionState.currentStreak > 0) { setStreakBroken(true); setPreviousStreak(sessionState.currentStreak); setTimeout(() => setStreakBroken(false), 3000) }
+      newStreak = 0
+    }
+    setTimeout(() => setFlashAnimation(null), 500)
+
+    setSessionState((prev) => ({
+      ...prev, questionsAnswered: prev.questionsAnswered + 1, correctAnswersThisSession: newCorrect,
+      currentStreak: newStreak, bestStreakThisSession: Math.max(prev.bestStreakThisSession, newStreak),
+    }))
+    await recordAnswer(isCorrect, newStreak)
+
+    if (sessionState.questionsAnswered + 1 >= sessionState.sessionLength) {
+      setTimeout(() => { setShowSummary(true); setSessionState((prev) => ({ ...prev, isActive: false })) }, 2000)
+    }
+  }
+
+  const handleTimeOut = async () => {
+    if (locked || !sessionState.isActive) return
+    setSelected(-1); setLocked(true)
+    setFlashAnimation('wrong'); playFail()
+    if (sessionState.currentStreak > 0) { setStreakBroken(true); setPreviousStreak(sessionState.currentStreak); setTimeout(() => setStreakBroken(false), 3000) }
+    setSessionState((prev) => ({ ...prev, questionsAnswered: prev.questionsAnswered + 1, currentStreak: 0 }))
+    await recordAnswer(false, 0)
+    setTimeout(() => setFlashAnimation(null), 500)
+    if (sessionState.questionsAnswered + 1 >= sessionState.sessionLength) {
+      setTimeout(() => { setShowSummary(true); setSessionState((prev) => ({ ...prev, isActive: false })) }, 2000)
+    }
+  }
+
+  const next = () => {
+    if (sessionState.questionsAnswered >= sessionState.sessionLength) {
+      setShowSummary(true); setSessionState((prev) => ({ ...prev, isActive: false })); return
+    }
+    setSelected(null); setLocked(false)
+    setSessionState((prev) => ({ ...prev, currentQuestionIndex: (prev.currentQuestionIndex + 1) % sessionQuestions.length }))
+  }
+
+  const handleExit = () => {
+    if (sessionState.questionsAnswered > 0 && sessionState.questionsAnswered < sessionState.sessionLength) setShowExitConfirm(true)
+    else resetSession()
+  }
+
+  const resetSession = () => {
+    setSessionStarted(false); setShowSummary(false); setShowExitConfirm(false); setSelected(null); setLocked(false)
+    setSessionState({ currentQuestionIndex: 0, questionsAnswered: 0, correctAnswersThisSession: 0, currentStreak: 0, bestStreakThisSession: 0, sessionLength: 20, startTime: 0, elapsedTime: 0, isActive: false })
+    if (timerIntervalRef.current) clearInterval(timerIntervalRef.current)
+    if (elapsedTimeIntervalRef.current) clearInterval(elapsedTimeIntervalRef.current)
+  }
+
+  const progress = sessionState.sessionLength ? (sessionState.questionsAnswered / sessionState.sessionLength) * 100 : 0
+  const sessionAccuracy = sessionState.questionsAnswered ? Math.round((sessionState.correctAnswersThisSession / sessionState.questionsAnswered) * 100) : 0
+  const formatTime = (sec: number) => `${Math.floor(sec / 60)}:${(sec % 60).toString().padStart(2, '0')}`
+
+  // Styles
+  const s: Record<string, CSSProperties> = {
+    container: { maxWidth: '800px', margin: '0 auto', padding: '24px' },
+    card: { backgroundColor: c.card, borderRadius: '16px', border: `1px solid ${c.border}`, padding: '24px' },
+    title: { fontSize: '28px', fontWeight: 700, margin: 0 },
+    subtitle: { fontSize: '14px', color: c.textMuted, marginTop: '4px' },
+    btn: { padding: '12px 24px', borderRadius: '10px', border: 'none', fontSize: '15px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s' },
+    btnPrimary: { backgroundColor: c.blue, color: '#fff' },
+    btnSecondary: { backgroundColor: 'transparent', color: c.text, border: `2px solid ${c.border}` },
+    modeCard: { padding: '20px', borderRadius: '12px', border: '2px solid', cursor: 'pointer', textAlign: 'center' as const, transition: 'all 0.15s' },
+    lengthBtn: { padding: '12px 16px', borderRadius: '10px', border: '2px solid', cursor: 'pointer', fontWeight: 600, transition: 'all 0.15s' },
+    progressBar: { height: '10px', backgroundColor: c.bg, borderRadius: '5px', overflow: 'hidden' },
+    progressFill: { height: '100%', borderRadius: '5px', transition: 'width 0.3s' },
+    choiceBtn: { width: '100%', padding: '16px', borderRadius: '12px', border: '2px solid', backgroundColor: c.bg, cursor: 'pointer', textAlign: 'left' as const, fontSize: '15px', display: 'flex', alignItems: 'center', gap: '12px', transition: 'all 0.15s' },
+    choiceLetter: { width: '32px', height: '32px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '14px', flexShrink: 0 },
+    codeBlock: { backgroundColor: '#0d1117', borderRadius: '12px', padding: '16px', fontFamily: 'monospace', fontSize: '14px', color: '#7ee787', border: `1px solid ${c.border}`, overflowX: 'auto' as const, whiteSpace: 'pre-wrap' as const },
+    statBox: { textAlign: 'center' as const, padding: '20px', backgroundColor: c.bg, borderRadius: '12px' },
+    statValue: { fontSize: '28px', fontWeight: 700 },
+    statLabel: { fontSize: '13px', color: c.textMuted, marginTop: '4px' },
+    badge: { padding: '6px 14px', borderRadius: '20px', fontSize: '13px', fontWeight: 600 },
+    modal: { position: 'fixed' as const, inset: 0, backgroundColor: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, backdropFilter: 'blur(4px)' },
+    modalCard: { backgroundColor: c.card, borderRadius: '16px', padding: '32px', maxWidth: '500px', width: '90%', border: `2px solid ${c.border}` },
+    timerBar: { width: '120px', height: '8px', backgroundColor: c.bg, borderRadius: '4px', overflow: 'hidden' },
+  }
+
+  // Setup screen
+  if (!sessionStarted) {
+    return (
+      <div style={s.container}>
+        <div style={{ textAlign: 'center', marginBottom: '32px' }}>
+          <h1 style={{ ...s.title, background: `linear-gradient(90deg, ${c.orange}, ${c.red})`, WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>🎯 C++ Speedrun</h1>
+          <p style={s.subtitle}>Test your knowledge with rapid-fire questions. Build streaks and earn XP!</p>
+        </div>
+
+        <div style={s.card}>
+          {/* Mode Selection */}
+          <div style={{ marginBottom: '24px' }}>
+            <div style={{ fontSize: '14px', fontWeight: 600, color: c.textMuted, marginBottom: '12px' }}>Choose Speed Mode</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <div onClick={() => setTimeMode('quick')} style={{ ...s.modeCard, borderColor: timeMode === 'quick' ? c.orange : c.border, backgroundColor: timeMode === 'quick' ? c.orangeBg : 'transparent' }}>
+                <div style={{ fontSize: '28px', marginBottom: '8px' }}>⚡</div>
+                <div style={{ fontWeight: 700, color: timeMode === 'quick' ? c.orange : c.text }}>Quick Recall</div>
+                <div style={{ fontSize: '12px', color: c.textMuted }}>5 seconds • +10 XP</div>
+              </div>
+              <div onClick={() => setTimeMode('deep')} style={{ ...s.modeCard, borderColor: timeMode === 'deep' ? c.purple : c.border, backgroundColor: timeMode === 'deep' ? c.purpleBg : 'transparent' }}>
+                <div style={{ fontSize: '28px', marginBottom: '8px' }}>🧠</div>
+                <div style={{ fontWeight: 700, color: timeMode === 'deep' ? c.purple : c.text }}>Deep Think</div>
+                <div style={{ fontSize: '12px', color: c.textMuted }}>15 seconds • +25 XP</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Length Selection */}
+          <div style={{ marginBottom: '24px' }}>
+            <div style={{ fontSize: '14px', fontWeight: 600, color: c.textMuted, marginBottom: '12px' }}>Session Length</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
+              {[10, 20, 30].map((len) => (
+                <button key={len} onClick={() => setSessionLength(len)} style={{ ...s.lengthBtn, borderColor: sessionLength === len ? c.blue : c.border, backgroundColor: sessionLength === len ? c.blueBg : 'transparent', color: sessionLength === len ? c.blue : c.text }}>
+                  {len} Questions
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Info Box */}
+          <div style={{ padding: '16px', borderRadius: '12px', backgroundColor: timeMode === 'quick' ? c.orangeBg : c.purpleBg, border: `1px solid ${timeMode === 'quick' ? c.orange : c.purple}40`, marginBottom: '24px' }}>
+            <div style={{ fontSize: '14px', color: c.text }}><strong>⏱️ Mode:</strong> {timeMode === 'quick' ? 'Quick (5s)' : 'Deep (15s)'} • <strong>Potential XP:</strong> {sessionLength * xpPerQuestion}</div>
+          </div>
+
+          {/* Stats */}
+          {userStats.totalQuestions > 0 && (
+            <div style={{ padding: '16px', borderRadius: '12px', backgroundColor: c.bg, marginBottom: '24px' }}>
+              <div style={{ fontSize: '14px', fontWeight: 600, color: c.textMuted, marginBottom: '8px' }}>Your Stats</div>
+              <div style={{ display: 'flex', gap: '24px', fontSize: '14px' }}>
+                <span><span style={{ color: c.textDim }}>Best Streak:</span> 🔥 {userStats.streak}</span>
+                <span><span style={{ color: c.textDim }}>Accuracy:</span> {userStats.accuracy}%</span>
+                <span><span style={{ color: c.textDim }}>Total XP:</span> {userStats.correctAnswers * 10}</span>
+              </div>
+            </div>
+          )}
+
+          {/* Trophy Box */}
+          <div style={{ padding: '16px', borderRadius: '12px', backgroundColor: c.yellowBg, border: `1px solid ${c.yellow}40`, marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <span style={{ fontSize: '28px' }}>🏆</span>
+            <div>
+              <div style={{ fontWeight: 600, color: c.text }}>Best Today: {userStats.streak > 0 ? `${userStats.streak} streak!` : 'No streak yet'}</div>
+              <div style={{ fontSize: '12px', color: c.textMuted }}>{userStats.streak === 0 ? 'Start a streak!' : userStats.streak < 5 ? `${5 - userStats.streak} more for "On Fire"!` : userStats.streak < 10 ? `${10 - userStats.streak} more for Unstoppable!` : "You're Unstoppable!"}</div>
+            </div>
+          </div>
+
+          <button onClick={startSession} style={{ ...s.btn, width: '100%', padding: '16px', fontSize: '18px', background: timeMode === 'quick' ? `linear-gradient(90deg, ${c.orange}, ${c.red})` : `linear-gradient(90deg, ${c.purple}, ${c.blue})`, color: '#fff' }}>
+            🚀 Start {timeMode === 'quick' ? 'Quick' : 'Deep'} Speedrun
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  // Summary Modal
+  if (showSummary) {
+    return (
+      <div style={s.modal}>
+        <div style={s.modalCard}>
+          <h2 style={{ ...s.title, marginBottom: '24px' }}>📊 Session Summary</h2>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px', marginBottom: '24px' }}>
+            <div style={{ ...s.statBox, backgroundColor: c.blueBg }}><div style={{ ...s.statValue, color: c.blue }}>{sessionState.questionsAnswered}</div><div style={s.statLabel}>Questions</div></div>
+            <div style={{ ...s.statBox, backgroundColor: c.greenBg }}><div style={{ ...s.statValue, color: c.green }}>{sessionState.correctAnswersThisSession}</div><div style={s.statLabel}>Correct</div></div>
+            <div style={{ ...s.statBox, backgroundColor: c.purpleBg }}><div style={{ ...s.statValue, color: c.purple }}>{sessionAccuracy}%</div><div style={s.statLabel}>Accuracy</div></div>
+            <div style={{ ...s.statBox, backgroundColor: c.orangeBg }}><div style={{ ...s.statValue, color: c.orange }}>{sessionState.bestStreakThisSession}</div><div style={s.statLabel}>Best Streak</div></div>
+          </div>
+          <div style={{ ...s.statBox, marginBottom: '24px' }}><div style={s.statLabel}>Time</div><div style={{ fontSize: '20px', fontWeight: 600, color: c.text }}>{formatTime(sessionState.elapsedTime)}</div></div>
+          <div style={{ display: 'flex', gap: '12px' }}>
+            <button onClick={() => { resetSession(); startSession() }} style={{ ...s.btn, ...s.btnPrimary, flex: 1 }}>🔄 Run Again</button>
+            <button onClick={resetSession} style={{ ...s.btn, ...s.btnSecondary, flex: 1 }}>Choose Topic</button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Exit Confirm Modal
+  if (showExitConfirm) {
+    return (
+      <div style={s.modal}>
+        <div style={{ ...s.modalCard, borderColor: c.orange }}>
+          <h3 style={{ fontSize: '20px', fontWeight: 700, color: c.text, marginBottom: '12px' }}>⚠️ Exit Session?</h3>
+          <p style={{ fontSize: '14px', color: c.textMuted, marginBottom: '20px' }}>You've completed {sessionState.questionsAnswered}/{sessionState.sessionLength} questions.</p>
+          <div style={{ display: 'flex', gap: '12px' }}>
+            <button onClick={() => setShowExitConfirm(false)} style={{ ...s.btn, ...s.btnPrimary, flex: 1 }}>Keep Going</button>
+            <button onClick={resetSession} style={{ ...s.btn, ...s.btnSecondary, flex: 1 }}>Exit</button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Main Game Screen
+  return (
+    <div style={s.container}>
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: c.card, borderRadius: '12px', border: `1px solid ${c.border}`, padding: '16px', marginBottom: '16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <h1 style={{ fontSize: '20px', fontWeight: 600, color: c.text, margin: 0 }}>C++ Speedrun</h1>
+          <span style={{ ...s.badge, backgroundColor: timeMode === 'quick' ? c.orangeBg : c.purpleBg, color: timeMode === 'quick' ? c.orange : c.purple }}>{timeMode === 'quick' ? '⚡ Quick' : '🧠 Deep'}</span>
+          <button onClick={handleExit} style={{ background: 'none', border: 'none', color: c.textMuted, cursor: 'pointer', fontSize: '14px' }}>Exit</button>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', fontSize: '14px' }}>
+          <span style={{ ...s.badge, backgroundColor: streakBroken ? c.redBg : c.orangeBg, color: streakBroken ? c.red : c.orange, border: streakBroken ? `2px solid ${c.red}` : 'none' }}>
+            {sessionState.currentStreak >= 5 ? '🔥🔥' : '🔥'} {sessionState.currentStreak} {sessionState.bestStreakThisSession > 0 && `(Best: ${sessionState.bestStreakThisSession})`}
+          </span>
+          <span style={{ color: c.textMuted }}>Time: <strong style={{ color: c.text, fontFamily: 'monospace' }}>{formatTime(sessionState.elapsedTime)}</strong></span>
+        </div>
+      </div>
+
+      {/* Streak Break Alert */}
+      {streakBroken && (
+        <div style={{ backgroundColor: c.redBg, border: `2px solid ${c.red}`, borderRadius: '12px', padding: '12px 16px', marginBottom: '16px' }}>
+          <span style={{ fontSize: '14px', fontWeight: 600, color: c.red }}>Streak broke at {previousStreak}. Keep going!</span>
+        </div>
+      )}
+
+      {/* Progress */}
+      <div style={{ marginBottom: '20px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', marginBottom: '8px' }}>
+          <span style={{ color: c.text, fontWeight: 500 }}>Progress: {sessionState.questionsAnswered} / {sessionState.sessionLength}</span>
+          <span style={{ color: c.textMuted }}>{Math.round(progress)}%</span>
+        </div>
+        <div style={s.progressBar}>
+          <div style={{ ...s.progressFill, width: `${progress}%`, background: progress >= 75 ? `linear-gradient(90deg, ${c.green}, ${c.blue})` : c.blue }} />
+        </div>
+        {progress >= 75 && progress < 100 && <p style={{ fontSize: '13px', color: c.green, marginTop: '8px' }}>Almost there! 💪</p>}
+      </div>
+
+      {/* Question Card */}
+      <div style={{ ...s.card, border: flashAnimation === 'correct' ? `3px solid ${c.green}` : flashAnimation === 'wrong' ? `3px solid ${c.red}` : `1px solid ${c.border}`, backgroundColor: flashAnimation === 'correct' ? c.greenBg : flashAnimation === 'wrong' ? c.redBg : c.card }}>
+        <p style={{ fontSize: '18px', fontWeight: 500, color: c.text, marginBottom: '16px' }}>{currentQuestion.prompt}</p>
+
+        {/* Code Block for Deep Think */}
+        {isDeepThink && currentDeepQuestion?.code && (
+          <div style={{ ...s.codeBlock, marginBottom: '20px' }}>{currentDeepQuestion.code}</div>
+        )}
+
+        {/* Feedback */}
+        {locked && selected !== null && (
+          <div style={{ padding: '16px', borderRadius: '12px', marginBottom: '20px', backgroundColor: selected === currentQuestion.answerIndex ? c.greenBg : c.redBg, border: `2px solid ${selected === currentQuestion.answerIndex ? c.green : c.red}` }}>
+            <p style={{ fontSize: '14px', fontWeight: 600, color: selected === currentQuestion.answerIndex ? c.green : c.red, margin: 0 }}>
+              {selected === currentQuestion.answerIndex ? '✓ Correct!' : `✗ Incorrect. Answer: ${currentQuestion.choices[currentQuestion.answerIndex]}`}
+            </p>
+            {isDeepThink && currentDeepQuestion?.explanation && <p style={{ fontSize: '13px', color: c.textMuted, marginTop: '8px' }}>💡 {currentDeepQuestion.explanation}</p>}
+            {!isDeepThink && selected !== currentQuestion.answerIndex && (currentQuestion as Question).hint && <p style={{ fontSize: '13px', color: c.red, marginTop: '8px', fontStyle: 'italic' }}>💡 {(currentQuestion as Question).hint}</p>}
+          </div>
+        )}
+
+        {/* Choices */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          {currentQuestion.choices.map((choice, i) => {
+            const isCorrect = locked && i === currentQuestion.answerIndex
+            const isWrong = locked && selected === i && i !== currentQuestion.answerIndex
+            let bg = c.bg, border = c.border, textColor = c.text, letterBg = c.card, letterColor = c.textMuted
+            if (isCorrect) { bg = c.greenBg; border = c.green; textColor = c.green; letterBg = c.green; letterColor = '#fff' }
+            else if (isWrong) { bg = c.redBg; border = c.red; textColor = c.red; letterBg = c.red; letterColor = '#fff' }
+            return (
+              <button key={i} onClick={() => handleAnswer(i)} disabled={locked}
+                style={{ ...s.choiceBtn, backgroundColor: bg, borderColor: border, color: textColor, opacity: locked && !isCorrect && !isWrong ? 0.5 : 1, cursor: locked ? 'not-allowed' : 'pointer' }}>
+                <span style={{ ...s.choiceLetter, backgroundColor: letterBg, color: letterColor }}>{String.fromCharCode(65 + i)}</span>
+                <span style={{ flex: 1 }}>{choice}</span>
+                {isCorrect && <span>✓</span>}
+                {isWrong && <span>✗</span>}
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Footer */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '20px', paddingTop: '16px', borderTop: `1px solid ${c.border}` }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px', fontSize: '14px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ color: c.textMuted }}>⏱️</span>
+              <div style={s.timerBar}><div style={{ height: '100%', borderRadius: '4px', backgroundColor: timeLeft <= 3 ? c.red : timeLeft <= timerDuration * 0.5 ? c.orange : c.green, width: `${(timeLeft / timerDuration) * 100}%`, transition: 'width 0.2s' }} /></div>
+              <span style={{ fontFamily: 'monospace', fontWeight: 700, color: timeLeft <= 3 ? c.red : c.text }}>{timeLeft}s</span>
+            </div>
+            <span style={{ color: c.textMuted }}>Accuracy: <strong style={{ color: c.text }}>{sessionAccuracy}%</strong></span>
+            <span style={{ color: c.purple }}>+{xpPerQuestion} XP</span>
+          </div>
+          <button onClick={next} disabled={!locked} style={{ ...s.btn, ...s.btnPrimary, opacity: locked ? 1 : 0.5, cursor: locked ? 'pointer' : 'not-allowed' }}>
+            {sessionState.questionsAnswered >= sessionState.sessionLength ? 'Finish' : 'Next'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 export default Speedrun

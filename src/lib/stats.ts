@@ -15,6 +15,10 @@ export type UserStats = {
 	chatMessages: number // Number of chat messages sent
 	activeTime: number // Minutes spent actively collaborating
 	lastUpdated?: number
+	// Daily streak tracking
+	dailyStreak?: number // Consecutive days of activity
+	lastActiveDate?: string // YYYY-MM-DD format
+	bestDailyStreak?: number // Best daily streak ever
 }
 
 export type RoomStats = {
@@ -66,7 +70,46 @@ function getDefaultStats(name: string): UserStats {
 		codeEdits: 0,
 		chatMessages: 0,
 		activeTime: 0,
+		dailyStreak: 0,
+		lastActiveDate: undefined,
+		bestDailyStreak: 0,
 	}
+}
+
+// Get today's date in YYYY-MM-DD format
+function getTodayDate(): string {
+	return new Date().toISOString().split('T')[0]
+}
+
+// Check and update daily streak
+function updateDailyStreak(stats: UserStats): UserStats {
+	const today = getTodayDate()
+	const yesterday = new Date()
+	yesterday.setDate(yesterday.getDate() - 1)
+	const yesterdayStr = yesterday.toISOString().split('T')[0]
+	
+	if (stats.lastActiveDate === today) {
+		// Already active today, no change needed
+		return stats
+	}
+	
+	if (stats.lastActiveDate === yesterdayStr) {
+		// Consecutive day! Increment streak
+		stats.dailyStreak = (stats.dailyStreak || 0) + 1
+		stats.bestDailyStreak = Math.max(stats.bestDailyStreak || 0, stats.dailyStreak)
+		stats.consistency = Math.max(stats.consistency, stats.dailyStreak)
+	} else if (!stats.lastActiveDate) {
+		// First activity ever
+		stats.dailyStreak = 1
+		stats.bestDailyStreak = 1
+		stats.consistency = 1
+	} else {
+		// Streak broken! Reset to 1
+		stats.dailyStreak = 1
+	}
+	
+	stats.lastActiveDate = today
+	return stats
 }
 
 // Calculate accuracy percentage
@@ -78,13 +121,16 @@ function calculateAccuracy(stats: UserStats): number {
 // Update stats after answering a question
 export async function recordAnswer(isCorrect: boolean, currentStreak: number) {
 	const identity = getIdentity()
-	const stats = getLocalStats()
+	let stats = getLocalStats()
 	
 	stats.totalQuestions += 1
 	if (isCorrect) {
 		stats.correctAnswers += 1
 	}
 	stats.streak = Math.max(stats.streak, currentStreak)
+	
+	// Update daily streak tracking
+	stats = updateDailyStreak(stats)
 	stats.accuracy = calculateAccuracy(stats)
 	stats.lastUpdated = Date.now()
 	
