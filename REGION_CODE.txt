@@ -1,0 +1,274 @@
+// Insert this after the CHALLENGES object definition in Arena.tsx
+
+const CHALLENGE_REGIONS: Record<Exclude<ChallengeType, null>, { starterCode: string; regions: Omit<CodeRegion, 'assignedTo' | 'assignedName'>[] }> = {
+  'fix-the-bug': {
+    starterCode: `// 🐛 Fix the Bug Challenge!
+// Each team member fixes ONE function. Stay in your region!
+
+#include <iostream>
+#include <vector>
+using namespace std;
+
+// ========== REGION A: sumArray ==========
+// TODO: Fix the off-by-one error in this function
+int sumArray(int arr[], int size) {
+    int sum = 0;
+    for (int i = 0; i <= size; i++) {  // BUG HERE
+        sum += arr[i];
+    }
+    return sum;
+}
+// ========== END REGION A ==========
+
+// ========== REGION B: swap ==========
+// TODO: Fix pass-by-value issue
+void swap(int a, int b) {  // BUG: should be references
+    int temp = a;
+    a = b;
+    b = temp;
+}
+// ========== END REGION B ==========
+
+// ========== REGION C: createArray ==========
+// TODO: Fix the dangling pointer issue
+int* createArray(int size) {
+    int arr[size];  // BUG: local array
+    for (int i = 0; i < size; i++) {
+        arr[i] = i * 2;
+    }
+    return arr;  // BUG: returning local
+}
+// ========== END REGION C ==========
+
+// ========== REGION D: main (SHARED - discuss together!) ==========
+int main() {
+    int numbers[] = {1, 2, 3, 4, 5};
+    cout << "Sum: " << sumArray(numbers, 5) << endl;
+    
+    int x = 10, y = 20;
+    swap(x, y);
+    cout << "After swap: x=" << x << ", y=" << y << endl;
+    
+    return 0;
+}
+// ========== END REGION D ==========
+`,
+    regions: [
+      { id: 'A', name: 'sumArray', description: 'Fix the loop bounds', startMarker: '// ========== REGION A', endMarker: '// ========== END REGION A' },
+      { id: 'B', name: 'swap', description: 'Fix pass-by-value', startMarker: '// ========== REGION B', endMarker: '// ========== END REGION B' },
+      { id: 'C', name: 'createArray', description: 'Fix dangling pointer', startMarker: '// ========== REGION C', endMarker: '// ========== END REGION C' },
+      { id: 'D', name: 'main', description: 'Shared testing area', startMarker: '// ========== REGION D', endMarker: '// ========== END REGION D' },
+    ],
+  },
+  'fill-the-blank': {
+    starterCode: `// 📝 Fill the Blank Challenge!
+// Each member completes their assigned section!
+
+#include <iostream>
+#include <string>
+using namespace std;
+
+// ========== REGION A: Rectangle Constructor ==========
+// TODO: Initialize width and height
+class Rectangle {
+private:
+    double width;
+    double height;
+
+public:
+    Rectangle(double w, double h) {
+        ___ = w;   // Fill this
+        ___ = h;   // Fill this
+    }
+// ========== END REGION A ==========
+
+// ========== REGION B: getArea ==========
+    // TODO: Return width * height
+    double getArea() {
+        return ___;  // Fill this
+    }
+// ========== END REGION B ==========
+
+// ========== REGION C: getPerimeter ==========
+    // TODO: Return 2*(width+height)
+    double getPerimeter() {
+        return ___;  // Fill this
+    }
+};
+// ========== END REGION C ==========
+
+// ========== REGION D: findMax template ==========
+template <typename T>
+T findMax(T a, T b) {
+    return ___;  // Fill: use ternary operator
+}
+// ========== END REGION D ==========
+
+int main() {
+    Rectangle rect(5.0, 3.0);
+    cout << "Area: " << rect.getArea() << endl;
+    cout << "Perimeter: " << rect.getPerimeter() << endl;
+    cout << "Max: " << findMax(10, 20) << endl;
+    return 0;
+}
+`,
+    regions: [
+      { id: 'A', name: 'Constructor', description: 'Initialize members', startMarker: '// ========== REGION A', endMarker: '// ========== END REGION A' },
+      { id: 'B', name: 'getArea', description: 'Calculate area', startMarker: '// ========== REGION B', endMarker: '// ========== END REGION B' },
+      { id: 'C', name: 'getPerimeter', description: 'Calculate perimeter', startMarker: '// ========== REGION C', endMarker: '// ========== END REGION C' },
+      { id: 'D', name: 'findMax', description: 'Template function', startMarker: '// ========== REGION D', endMarker: '// ========== END REGION D' },
+    ],
+  },
+  'code-review': {
+    starterCode: `// 🔍 Code Review Challenge!
+// Each member improves their assigned section!
+
+#include <iostream>
+using namespace std;
+
+// ========== REGION A: Rename & document this function ==========
+// TODO: Rename 'f' to something meaningful, add comments
+int f(int x[], int n) {
+    int r = 0;
+    for (int i = 0; i < n; i++) {
+        if (x[i] > r) r = x[i];
+    }
+    return r;
+}
+// ========== END REGION A ==========
+
+// ========== REGION B: Fix class naming & encapsulation ==========
+// TODO: Rename 's' to Student, use proper naming, add getters
+class s {
+public:
+    string n;
+    int a;
+    float g;
+    
+    void p() {
+        cout << n << " " << a << " " << g << endl;
+    }
+};
+// ========== END REGION B ==========
+
+// ========== REGION C: Fix memory leak ==========
+// TODO: This function leaks memory - fix it!
+void process(int* arr, int size) {
+    int* copy = new int[size];
+    for (int i = 0; i < size; i++) {
+        copy[i] = arr[i] * 2;
+    }
+    cout << "Done" << endl;
+    // Memory leak: copy is never deleted!
+}
+// ========== END REGION C ==========
+
+// ========== REGION D: Main - test the improvements ==========
+int main() {
+    int nums[] = {5, 2, 9, 1, 7};
+    cout << "Max: " << f(nums, 5) << endl;
+    
+    s student;
+    student.n = "Alice";
+    student.a = 20;
+    student.g = 3.8;
+    student.p();
+    
+    process(nums, 5);
+    return 0;
+}
+// ========== END REGION D ==========
+`,
+    regions: [
+      { id: 'A', name: 'findMax', description: 'Rename and document', startMarker: '// ========== REGION A', endMarker: '// ========== END REGION A' },
+      { id: 'B', name: 'Student class', description: 'Fix naming & encapsulation', startMarker: '// ========== REGION B', endMarker: '// ========== END REGION B' },
+      { id: 'C', name: 'process', description: 'Fix memory leak', startMarker: '// ========== REGION C', endMarker: '// ========== END REGION C' },
+      { id: 'D', name: 'main', description: 'Shared testing', startMarker: '// ========== REGION D', endMarker: '// ========== END REGION D' },
+    ],
+  },
+  'pair-programming': {
+    starterCode: `// 👯 Pair Programming: Linked List
+// Each member implements their assigned methods!
+
+#include <iostream>
+using namespace std;
+
+struct Node {
+    int data;
+    Node* next;
+    Node(int val) : data(val), next(nullptr) {}
+};
+
+class LinkedList {
+private:
+    Node* head;
+
+public:
+    LinkedList() : head(nullptr) {}
+
+// ========== REGION A: insertAtEnd ==========
+    // TODO: Add node at the end of list
+    void insertAtEnd(int value) {
+        // Your code here
+        
+    }
+// ========== END REGION A ==========
+
+// ========== REGION B: insertAtBeginning ==========
+    // TODO: Add node at the beginning
+    void insertAtBeginning(int value) {
+        // Your code here
+        
+    }
+// ========== END REGION B ==========
+
+// ========== REGION C: print ==========
+    // TODO: Print all elements
+    void print() {
+        // Your code here
+        
+    }
+// ========== END REGION C ==========
+
+// ========== REGION D: reverse ==========
+    // TODO: Reverse the linked list
+    void reverse() {
+        // Your code here
+        
+    }
+// ========== END REGION D ==========
+
+    ~LinkedList() {
+        while (head) {
+            Node* temp = head;
+            head = head->next;
+            delete temp;
+        }
+    }
+};
+
+int main() {
+    LinkedList list;
+    list.insertAtEnd(1);
+    list.insertAtEnd(2);
+    list.insertAtEnd(3);
+    list.insertAtBeginning(0);
+    
+    cout << "Original: ";
+    list.print();
+    
+    list.reverse();
+    cout << "Reversed: ";
+    list.print();
+    
+    return 0;
+}
+`,
+    regions: [
+      { id: 'A', name: 'insertAtEnd', description: 'Add to end of list', startMarker: '// ========== REGION A', endMarker: '// ========== END REGION A' },
+      { id: 'B', name: 'insertAtBeginning', description: 'Add to start', startMarker: '// ========== REGION B', endMarker: '// ========== END REGION B' },
+      { id: 'C', name: 'print', description: 'Display list', startMarker: '// ========== REGION C', endMarker: '// ========== END REGION C' },
+      { id: 'D', name: 'reverse', description: 'Reverse in place', startMarker: '// ========== REGION D', endMarker: '// ========== END REGION D' },
+    ],
+  },
+}

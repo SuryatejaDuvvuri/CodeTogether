@@ -226,3 +226,41 @@ export function playVictory() {
 		console.warn('Audio playback failed:', error)
 	}
 }
+
+// Celebration sound - "TADA!" for completing sessions
+export function playCelebration() {
+	if (!isSoundEnabled()) return
+	
+	try {
+		const ctx = getAudioContext()
+		const now = ctx.currentTime
+		
+		// Ascending celebratory fanfare with emphasis
+		const notes = [
+			{ freq: 523.25, delay: 0, duration: 0.12 },    // C5
+			{ freq: 659.25, delay: 0.08, duration: 0.12 }, // E5
+			{ freq: 783.99, delay: 0.16, duration: 0.12 }, // G5
+			{ freq: 1046.5, delay: 0.24, duration: 0.25 }, // C6
+			{ freq: 1318.5, delay: 0.35, duration: 0.4 },  // E6 (TADA!)
+		]
+		
+		notes.forEach(({ freq, delay, duration }) => {
+			const osc = ctx.createOscillator()
+			const gain = ctx.createGain()
+			
+			osc.type = 'sine'
+			osc.frequency.setValueAtTime(freq, now + delay)
+			
+			gain.gain.setValueAtTime(0.35, now + delay)
+			gain.gain.exponentialRampToValueAtTime(0.01, now + delay + duration)
+			
+			osc.connect(gain)
+			gain.connect(ctx.destination)
+			
+			osc.start(now + delay)
+			osc.stop(now + delay + duration)
+		})
+	} catch (error) {
+		console.warn('Audio playback failed:', error)
+	}
+}

@@ -4,6 +4,7 @@ import { getIdentity } from './identity.ts'
 
 export type UserStats = {
 	name: string
+	xp: number // Total experience points earned
 	accuracy: number // Percentage of correct answers
 	streak: number // Current or best streak
 	collaboration: number // Collaboration score (based on active participation)
@@ -24,6 +25,7 @@ export type UserStats = {
 export type RoomStats = {
 	roomId: string
 	roomName: string
+	challenge?: string // Challenge they worked on
 	participants: Array<{ id: string; name: string }>
 	totalEdits: number
 	totalMessages: number
@@ -31,6 +33,7 @@ export type RoomStats = {
 	score: number // Team score
 	createdAt?: number
 	lastActivity?: number
+	teamKey?: string // Unique key for grouping same team compositions
 }
 
 const STORAGE_KEY = 'codetogether:stats'
@@ -61,6 +64,7 @@ function saveLocalStats(stats: UserStats) {
 function getDefaultStats(name: string): UserStats {
 	return {
 		name,
+		xp: 0,
 		accuracy: 0,
 		streak: 0,
 		collaboration: 0,
@@ -119,13 +123,34 @@ function calculateAccuracy(stats: UserStats): number {
 }
 
 // Update stats after answering a question
-export async function recordAnswer(isCorrect: boolean, currentStreak: number) {
+export async function recordAnswer(isCorrect: boolean, currentStreak: number, xpToAward: number = 0) {
 	const identity = getIdentity()
+
+	// Merge latest stats from Firebase first to avoid overwriting XP/other fields
 	let stats = getLocalStats()
+	if (rtdbEnabled && db) {
+		try {
+			const statsRef = ref(db, `stats/${identity.id}`)
+			const snap = await get(statsRef)
+			if (snap.exists()) {
+				const firebaseStats = snap.val()
+				stats = {
+					...stats,
+					...firebaseStats,
+				}
+			}
+		} catch (error) {
+			console.error('Failed to read stats from Firebase:', error)
+		}
+	}
 	
 	stats.totalQuestions += 1
 	if (isCorrect) {
 		stats.correctAnswers += 1
+		// Award XP for correct answers
+		if (xpToAward > 0) {
+			stats.xp = (stats.xp || 0) + xpToAward
+		}
 	}
 	stats.streak = Math.max(stats.streak, currentStreak)
 	
@@ -142,12 +167,19 @@ export async function recordAnswer(isCorrect: boolean, currentStreak: number) {
 			const statsRef = ref(db, `stats/${identity.id}`)
 			await set(statsRef, {
 				name: identity.name,
+				xp: stats.xp || 0,
 				accuracy: stats.accuracy,
 				streak: stats.streak,
 				collaboration: stats.collaboration,
 				consistency: stats.consistency,
 				totalQuestions: stats.totalQuestions,
 				correctAnswers: stats.correctAnswers,
+				codeEdits: stats.codeEdits,
+				chatMessages: stats.chatMessages,
+				activeTime: stats.activeTime,
+				dailyStreak: stats.dailyStreak,
+				lastActiveDate: stats.lastActiveDate,
+				bestDailyStreak: stats.bestDailyStreak,
 				lastUpdated: serverTimestamp(),
 			})
 		} catch (error) {
@@ -158,17 +190,36 @@ export async function recordAnswer(isCorrect: boolean, currentStreak: number) {
 
 // Calculate collaboration score based on active participation
 function calculateCollaborationScore(stats: UserStats): number {
-	// Weighted formula: edits (40%), messages (30%), active time (30%)
-	const editScore = Math.min(stats.codeEdits * 0.1, 40) // Max 40 points from edits
-	const messageScore = Math.min(stats.chatMessages * 0.5, 30) // Max 30 points from messages
-	const timeScore = Math.min(stats.activeTime * 0.5, 30) // Max 30 points from active time
+	// More balanced formula with diminishing returns
+	// Encourages participation but prevents score inflation
+	const editScore = Math.min(Math.sqrt(stats.codeEdits) * 8, 35) // Max 35 from edits (sqrt for diminishing returns)
+	const messageScore = Math.min(Math.sqrt(stats.chatMessages) * 4, 25) // Max 25 from messages
+	const timeScore = Math.min(stats.activeTime * 0.4, 25) // Max 25 from active time (0.4 per minute)
 	return Math.round(editScore + messageScore + timeScore)
 }
 
 // Record a code edit in collaborative session
 export async function recordCodeEdit(roomId: string) {
 	const identity = getIdentity()
-	const stats = getLocalStats()
+	
+	// Read from Firebase first if available to get latest stats (especially XP)
+	let stats = getLocalStats()
+	if (rtdbEnabled && db) {
+		try {
+			const statsRef = ref(db, `stats/${identity.id}`)
+			const snap = await get(statsRef)
+			if (snap.exists()) {
+				const firebaseStats = snap.val()
+				// Merge Firebase stats with local stats, preferring Firebase for all fields
+				stats = {
+					...stats,
+					...firebaseStats,
+				}
+			}
+		} catch (error) {
+			console.error('Failed to read stats from Firebase:', error)
+		}
+	}
 	
 	stats.codeEdits += 1
 	stats.collaboration = calculateCollaborationScore(stats)
@@ -182,6 +233,7 @@ export async function recordCodeEdit(roomId: string) {
 			const statsRef = ref(db, `stats/${identity.id}`)
 			await set(statsRef, {
 				name: identity.name,
+				xp: stats.xp || 0,
 				accuracy: stats.accuracy,
 				streak: stats.streak,
 				collaboration: stats.collaboration,
@@ -205,7 +257,24 @@ export async function recordCodeEdit(roomId: string) {
 // Record a chat message in collaborative session
 export async function recordChatMessage(_roomId: string) {
 	const identity = getIdentity()
-	const stats = getLocalStats()
+	
+	// Read from Firebase first if available to get latest stats (especially XP)
+	let stats = getLocalStats()
+	if (rtdbEnabled && db) {
+		try {
+			const statsRef = ref(db, `stats/${identity.id}`)
+			const snap = await get(statsRef)
+			if (snap.exists()) {
+				const firebaseStats = snap.val()
+				stats = {
+					...stats,
+					...firebaseStats,
+				}
+			}
+		} catch (error) {
+			console.error('Failed to read stats from Firebase:', error)
+		}
+	}
 	
 	stats.chatMessages += 1
 	stats.collaboration = calculateCollaborationScore(stats)
@@ -219,6 +288,7 @@ export async function recordChatMessage(_roomId: string) {
 			const statsRef = ref(db, `stats/${identity.id}`)
 			await set(statsRef, {
 				name: identity.name,
+				xp: stats.xp || 0,
 				accuracy: stats.accuracy,
 				streak: stats.streak,
 				collaboration: stats.collaboration,
@@ -239,7 +309,24 @@ export async function recordChatMessage(_roomId: string) {
 // Record active time in collaborative session (call periodically, e.g., every minute)
 export async function recordActiveTime(_roomId: string, minutes: number = 1) {
 	const identity = getIdentity()
-	const stats = getLocalStats()
+	
+	// Read from Firebase first if available to get latest stats (especially XP)
+	let stats = getLocalStats()
+	if (rtdbEnabled && db) {
+		try {
+			const statsRef = ref(db, `stats/${identity.id}`)
+			const snap = await get(statsRef)
+			if (snap.exists()) {
+				const firebaseStats = snap.val()
+				stats = {
+					...stats,
+					...firebaseStats,
+				}
+			}
+		} catch (error) {
+			console.error('Failed to read stats from Firebase:', error)
+		}
+	}
 	
 	stats.activeTime += minutes
 	stats.collaboration = calculateCollaborationScore(stats)
@@ -253,6 +340,7 @@ export async function recordActiveTime(_roomId: string, minutes: number = 1) {
 			const statsRef = ref(db, `stats/${identity.id}`)
 			await set(statsRef, {
 				name: identity.name,
+				xp: stats.xp || 0,
 				accuracy: stats.accuracy,
 				streak: stats.streak,
 				collaboration: stats.collaboration,
@@ -328,6 +416,7 @@ export function useIndividualLeaderboard(
 			const val = child.val() as Omit<UserStats, 'id'>
 			const stats: UserStats = {
 				name: val.name || 'Anonymous',
+				xp: val.xp || 0,
 				accuracy: val.accuracy || 0,
 				streak: val.streak || 0,
 				collaboration: val.collaboration || 0,
@@ -356,7 +445,6 @@ export function useTeamLeaderboard(
 	callback: (entries: Array<RoomStats & { id: string }>) => void,
 ) {
 	if (!rtdbEnabled || !db) {
-		// Offline mode: return empty
 		callback([])
 		return () => {}
 	}
@@ -366,18 +454,23 @@ export function useTeamLeaderboard(
 		const entries: Array<RoomStats & { id: string }> = []
 		snapshot.forEach((child) => {
 			const val = child.val() as Omit<RoomStats, 'id'>
-			const roomStats: RoomStats = {
-				roomId: val.roomId || child.key || '',
-				roomName: val.roomName || 'Untitled Room',
-				participants: val.participants || [],
-				totalEdits: val.totalEdits || 0,
-				totalMessages: val.totalMessages || 0,
-				totalActiveTime: val.totalActiveTime || 0,
-				score: calculateTeamScore(val),
-				createdAt: val.createdAt,
-				lastActivity: val.lastActivity,
+			if (val && val.totalEdits > 0) { // Only show rooms with activity
+				const roomStats: RoomStats & { id: string } = {
+					id: child.key ?? '',
+					roomId: val.roomId || child.key || '',
+					roomName: val.roomName || 'Unnamed Room',
+					challenge: val.challenge,
+					participants: val.participants || [],
+					totalEdits: val.totalEdits || 0,
+					totalMessages: val.totalMessages || 0,
+					totalActiveTime: val.totalActiveTime || 0,
+					score: calculateTeamScore(val),
+					lastActivity: val.lastActivity,
+					createdAt: val.createdAt,
+					teamKey: val.teamKey,
+				}
+				entries.push(roomStats)
 			}
-			entries.push({ ...roomStats, id: child.key ?? '' })
 		})
 		
 		// Sort by score descending
@@ -390,40 +483,72 @@ export function useTeamLeaderboard(
 
 // Calculate team score for a room
 function calculateTeamScore(room: Omit<RoomStats, 'id' | 'score'>): number {
-	// Team score based on: edits (40%), messages (30%), active time (30%)
-	const editScore = Math.min(room.totalEdits * 0.2, 40)
-	const messageScore = Math.min(room.totalMessages * 1, 30)
-	const timeScore = Math.min(room.totalActiveTime * 0.5, 30)
+	// More balanced team scoring with diminishing returns to prevent spam
+	const editScore = Math.min(Math.sqrt(room.totalEdits) * 5, 40) // Max 40 from edits (sqrt for balance)
+	const messageScore = Math.min(Math.sqrt(room.totalMessages) * 3, 30) // Max 30 from messages
+	const timeScore = Math.min(room.totalActiveTime * 0.3, 30) // Max 30 from active time
 	return Math.round(editScore + messageScore + timeScore)
 }
 
-// Calculate individual score for Speedrun leaderboard: 0.4*A + 0.25*F + 0.2*C + 0.15*D
-// Note: C (collaboration) is now based on active participation, not just joining
+// Calculate individual score: Emphasis on collaboration and accuracy, with streak and consistency bonuses
+// Formula designed to reward active participation and quality
 function calculateIndividualScore(stats: UserStats): number {
-	const A = stats.accuracy
-	const F = stats.streak
-	const C = stats.collaboration
-	const D = stats.consistency
-	return 0.4 * A + 0.25 * F + 0.2 * C + 0.15 * D
+	const A = stats.accuracy // 0-100
+	const F = Math.min(stats.streak, 50) // Cap streak at 50 for fairness
+	const C = stats.collaboration // 0-100
+	const D = stats.consistency // 0-100
+	
+	// Weighted formula: Collaboration is key for this platform
+	// 35% collaboration, 35% accuracy, 20% consistency, 10% streak
+	return 0.35 * C + 0.35 * A + 0.20 * D + 0.10 * F
 }
 
 // Update room stats when activity happens
-export async function updateRoomStats(roomId: string, roomName: string, participantIds: string[]) {
+export async function updateRoomStats(roomId: string, roomName: string, participantIds: string[], challenge?: string) {
 	if (!rtdbEnabled || !db) return
 	
 	try {
 		const roomStatsRef = ref(db, `roomStats/${roomId}`)
 		const snapshot = await get(roomStatsRef)
 		
+		// Create team key from sorted participant IDs
+		const teamKey = participantIds.slice().sort().join('_')
+		
+		// Fetch actual participant names - try presence first (real-time), then stats (historical)
+		const participants: Array<{ id: string; name: string }> = []
+		for (const userId of participantIds) {
+			try {
+				// First try to get name from presence (current session)
+				const presenceSnap = await get(ref(db, `presence/${roomId}/${userId}`))
+				const presenceData = presenceSnap.val()
+				
+				if (presenceData?.name) {
+					participants.push({ id: userId, name: presenceData.name })
+				} else {
+					// Fallback to stats database
+					const userStatsSnap = await get(ref(db, `stats/${userId}`))
+					const userData = userStatsSnap.val()
+					participants.push({ 
+						id: userId, 
+						name: userData?.name || 'Anonymous' 
+					})
+				}
+			} catch {
+				participants.push({ id: userId, name: 'Anonymous' })
+			}
+		}
+		
 		const current = snapshot.val() as Partial<RoomStats> | null
 		const updates: Partial<RoomStats> & { lastActivity?: any; createdAt?: any } = {
 			roomId,
 			roomName,
-			participants: participantIds.map(id => ({ id, name: 'Loading...' })), // Names will be filled from presence
+			challenge,
+			participants,
 			totalEdits: current?.totalEdits || 0,
 			totalMessages: current?.totalMessages || 0,
 			totalActiveTime: current?.totalActiveTime || 0,
 			lastActivity: serverTimestamp() as any,
+			teamKey,
 		}
 		
 		if (!current) {
@@ -467,6 +592,97 @@ export async function incrementRoomMessages(roomId: string) {
 		await set(ref(db, `roomStats/${roomId}/lastActivity`), serverTimestamp())
 	} catch (error) {
 		console.error('Failed to increment room messages:', error)
+	}
+}
+
+/**
+ * Award XP to a user for completing a challenge
+ */
+export async function awardXP(xpAmount: number) {
+	const identity = getIdentity()
+
+	// Always update local stats so offline/demo mode still reflects XP gains
+	const localStats = getLocalStats()
+	localStats.xp = (localStats.xp || 0) + xpAmount
+	saveLocalStats(localStats)
+
+	// If RTDB isn't enabled, bail after local update
+	if (!rtdbEnabled || !db) return
+	try {
+		const userRef = ref(db, `stats/${identity.id}`)
+		const snap = await get(userRef)
+		const currentStats = snap.val() || {}
+		await set(userRef, {
+			...currentStats,
+			name: identity.name,
+			xp: (currentStats.xp || 0) + xpAmount,
+			lastUpdated: serverTimestamp(),
+		})
+	} catch (e) {
+		console.error('Failed to award XP:', e)
+	}
+}
+
+/**
+ * Award XP to all participants in a room for completing a challenge
+ */
+export async function awardXPToAll(participantIds: string[], xpAmount: number) {
+	if (!participantIds || participantIds.length === 0) return
+
+	// Update local stats for the current user even in offline/demo mode
+	const identity = getIdentity()
+	if (participantIds.includes(identity.id)) {
+		const localStats = getLocalStats()
+		localStats.xp = (localStats.xp || 0) + xpAmount
+		saveLocalStats(localStats)
+	}
+
+	// If RTDB is unavailable, stop after the local update
+	if (!rtdbEnabled || !db) return
+	const database = db // Type guard
+	try {
+		// Award XP to each participant
+		const promises = participantIds.map(async (userId) => {
+			try {
+				const userRef = ref(database, `stats/${userId}`)
+				const snap = await get(userRef)
+				const currentStats = snap.val() || {}
+				
+				// Use existing name from stats, no need to fetch from presence
+				const userName = currentStats.name || 'Anonymous'
+				
+				// Preserve ALL existing stats fields and only update xp
+				// Firebase doesn't allow undefined values, so conditionally include lastActiveDate
+				const updates: any = {
+					name: userName,
+					xp: (currentStats.xp || 0) + xpAmount,
+					accuracy: currentStats.accuracy || 0,
+					streak: currentStats.streak || 0,
+					collaboration: currentStats.collaboration || 0,
+					consistency: currentStats.consistency || 0,
+					totalQuestions: currentStats.totalQuestions || 0,
+					correctAnswers: currentStats.correctAnswers || 0,
+					codeEdits: currentStats.codeEdits || 0,
+					chatMessages: currentStats.chatMessages || 0,
+					activeTime: currentStats.activeTime || 0,
+					dailyStreak: currentStats.dailyStreak || 0,
+					bestDailyStreak: currentStats.bestDailyStreak || 0,
+					lastUpdated: serverTimestamp(),
+				}
+				
+				// Only include lastActiveDate if it exists (Firebase rejects undefined)
+				if (currentStats.lastActiveDate !== undefined) {
+					updates.lastActiveDate = currentStats.lastActiveDate
+				}
+				
+				await set(userRef, updates)
+			} catch (e) {
+				console.error(`Failed to award XP to user ${userId}:`, e)
+			}
+		})
+		await Promise.all(promises)
+	} catch (e) {
+		console.error('Failed to award XP to all participants:', e)
 	}
 }
 

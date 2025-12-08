@@ -91,3 +91,87 @@ a {
   scrollbar-width: thin;
   scrollbar-color: #3b82f6 transparent;
 }
+/* Region highlighting for collaborative coding */
+.my-region-highlight {
+  background-color: rgba(59, 130, 246, 0.1) !important;
+  border-left: 3px solid #3b82f6 !important;
+}
+
+.other-region-highlight {
+  background-color: rgba(113, 113, 122, 0.05) !important;
+}
+
+.my-region-glyph {
+  background-color: #3b82f6;
+  width: 4px !important;
+  margin-left: 3px;
+}
+
+.region-label {
+  color: #71717a !important;
+  font-size: 11px !important;
+  font-style: italic;
+  margin-left: 20px;
+}
+
+.region-decoration-A { border-left: 3px solid #3b82f6 !important; }
+.region-decoration-B { border-left: 3px solid #22c55e !important; }
+.region-decoration-C { border-left: 3px solid #f97316 !important; }
+.region-decoration-D { border-left: 3px solid #a855f7 !important; }
+
+/* Region-based collaborative editing */
+.my-region-bg {
+  background-color: rgba(59, 130, 246, 0.08) !important;
+}
+
+.region-line-A {
+  border-left: 3px solid #3b82f6 !important;
+  margin-left: 3px;
+}
+
+.region-line-B {
+  border-left: 3px solid #22c55e !important;
+  margin-left: 3px;
+}
+
+.region-line-C {
+  border-left: 3px solid #f97316 !important;
+  margin-left: 3px;
+}
+
+.region-line-D {
+  border-left: 3px solid #a855f7 !important;
+  margin-left: 3px;
+}
+
+/* Additional region styles */
+.shared-region-highlight {
+  background-color: rgba(168, 85, 247, 0.05) !important;
+}
+
+.region-border-A {
+  border-left: 3px solid #3b82f6 !important;
+  margin-left: 3px;
+}
+
+.region-border-B {
+  border-left: 3px solid #22c55e !important;
+  margin-left: 3px;
+}
+
+.region-border-C {
+  border-left: 3px solid #f97316 !important;
+  margin-left: 3px;
+}
+
+.region-border-D {
+  border-left: 3px solid #a855f7 !important;
+  margin-left: 3px;
+}
+
+/* Warning shake animation */
+@keyframes shake {
+  0%, 100% { transform: translateX(-50%); }
+  10%, 30%, 50%, 70%, 90% { transform: translateX(calc(-50% - 5px)); }
+  20%, 40%, 60%, 80% { transform: translateX(calc(-50% + 5px)); }
+}

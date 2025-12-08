@@ -115,15 +115,6 @@ function App() {
             Lobby
           </NavLink>
           <NavLink 
-            to="/arena" 
-            style={({ isActive }) => ({
-              ...styles.navLink,
-              ...(isActive ? styles.navLinkActive : {}),
-            })}
-          >
-            Arena
-          </NavLink>
-          <NavLink 
             to="/flashcards" 
             style={({ isActive }) => ({
               ...styles.navLink,

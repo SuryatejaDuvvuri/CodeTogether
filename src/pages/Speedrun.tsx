@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState, useRef } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import type { CSSProperties } from 'react'
 import { recordAnswer, getCurrentUserStats } from '../lib/stats.ts'
-import { playSuccess, playFail, playStreak, playWarning } from '../lib/sounds.ts'
+import { playSuccess, playFail, playStreak, playWarning, playCelebration } from '../lib/sounds.ts'
 
 // Shared color palette
 const c = {
@@ -34,6 +34,9 @@ type Question = {
   choices: string[]
   answerIndex: number
   hint?: string
+  topic?: string
+  difficulty?: 'easy' | 'medium' | 'hard'
+  relatedTopics?: string[]
 }
 
 type DeepThinkQuestion = {
@@ -46,26 +49,26 @@ type DeepThinkQuestion = {
 }
 
 const MOCK_QUESTIONS: Question[] = [
-  { id: 'q1', prompt: 'What is the correct way to declare a constant in C++?', choices: ['const int x = 5;', 'constant int x = 5;', 'int const x = 5;', 'Both A and C'], answerIndex: 3, hint: 'Both "const int" and "int const" are valid.' },
-  { id: 'q2', prompt: 'Which header file is needed for cout and cin?', choices: ['<stdio.h>', '<iostream>', '<conio.h>', '<string>'], answerIndex: 1, hint: 'iostream provides input/output stream objects.' },
-  { id: 'q3', prompt: 'What is the output of: cout << 5/2;', choices: ['2.5', '2', '3', '2.0'], answerIndex: 1, hint: 'Integer division truncates the decimal.' },
-  { id: 'q4', prompt: 'Which operator accesses members of a pointer to an object?', choices: ['.', '->', '::', '*'], answerIndex: 1, hint: 'Arrow operator (->) for pointer member access.' },
-  { id: 'q5', prompt: 'What does & do in a variable declaration?', choices: ['Bitwise AND', 'Address of', 'Creates a reference', 'Logical AND'], answerIndex: 2, hint: 'In declarations, & creates a reference variable.' },
-  { id: 'q6', prompt: 'Default access specifier for class members?', choices: ['public', 'private', 'protected', 'None'], answerIndex: 1, hint: 'Class members are private by default.' },
-  { id: 'q7', prompt: 'Keyword for dynamic memory allocation?', choices: ['malloc', 'new', 'alloc', 'create'], answerIndex: 1, hint: '"new" allocates memory and calls constructor.' },
-  { id: 'q8', prompt: 'Correct pointer declaration?', choices: ['int p*;', 'int *p;', '*int p;', 'pointer int p;'], answerIndex: 1, hint: 'Asterisk before variable name: int *p;' },
-  { id: 'q9', prompt: 'What does endl do?', choices: ['Ends program', 'Newline + flush buffer', 'Ends line only', 'Clears screen'], answerIndex: 1, hint: 'endl inserts newline AND flushes buffer.' },
-  { id: 'q10', prompt: 'Size of int on 64-bit systems?', choices: ['2 bytes', '4 bytes', '8 bytes', 'Depends'], answerIndex: 1, hint: 'int is typically 4 bytes even on 64-bit.' },
-  { id: 'q11', prompt: 'Correct for loop syntax?', choices: ['for (i = 0; i < 10; i++)', 'for (int i = 0; i < 10; i++)', 'for i in range(10)', 'foreach (int i in 10)'], answerIndex: 1, hint: 'C++ requires variable declaration in for loop.' },
-  { id: 'q12', prompt: 'What is a constructor?', choices: ['Destroys objects', 'Initializes objects', 'A variable type', 'A loop'], answerIndex: 1, hint: 'Constructors initialize objects on creation.' },
-  { id: 'q13', prompt: 'What does :: do?', choices: ['Compares values', 'Accesses scope', 'Creates pointer', 'Defines function'], answerIndex: 1, hint: ':: accesses namespaces, classes, or global scope.' },
-  { id: 'q14', prompt: 'Pass array to function?', choices: ['void func(int arr[])', 'void func(int[] arr)', 'void func(array int)', 'void func(int arr)'], answerIndex: 0, hint: 'Arrays passed as pointers: int arr[] or int* arr.' },
-  { id: 'q15', prompt: 'What does "virtual" do?', choices: ['Makes constant', 'Enables polymorphism', 'Creates template', 'Declares static'], answerIndex: 1, hint: 'Virtual enables runtime polymorphism.' },
-  { id: 'q16', prompt: 'struct vs class difference?', choices: ['No difference', 'Default access differs', 'struct no functions', 'class no inherit'], answerIndex: 1, hint: 'Only difference is default access specifier.' },
-  { id: 'q17', prompt: 'Delete null pointer?', choices: ['Undefined', 'Crashes', 'Safe (nothing)', 'Compile error'], answerIndex: 2, hint: 'Deleting null pointer is safe.' },
-  { id: 'q18', prompt: 'Output of: cout << (5 > 3 ? "Yes" : "No");', choices: ['5 > 3', 'Yes', 'No', 'true'], answerIndex: 1, hint: 'Ternary returns second value if true.' },
-  { id: 'q19', prompt: 'Prevent class inheritance?', choices: ['static', 'const', 'final', 'sealed'], answerIndex: 2, hint: 'C++11 "final" prevents inheritance.' },
-  { id: 'q20', prompt: 'Declare vector of integers?', choices: ['vector int v;', 'int vector v;', 'vector<int> v;', 'vector[int] v;'], answerIndex: 2, hint: 'Vectors use angle brackets: vector<int>.' },
+  { id: 'q1', prompt: 'What is the correct way to declare a constant in C++?', choices: ['const int x = 5;', 'constant int x = 5;', 'int const x = 5;', 'Both A and C'], answerIndex: 3, hint: 'Both "const int" and "int const" are valid.', topic: 'variables', difficulty: 'easy' },
+  { id: 'q2', prompt: 'Which header file is needed for cout and cin?', choices: ['<stdio.h>', '<iostream>', '<conio.h>', '<string>'], answerIndex: 1, hint: 'iostream provides input/output stream objects.', topic: 'basics', difficulty: 'easy' },
+  { id: 'q3', prompt: 'What is the output of: cout << 5/2;', choices: ['2.5', '2', '3', '2.0'], answerIndex: 1, hint: 'Integer division truncates the decimal.', topic: 'operators', difficulty: 'easy', relatedTopics: ['datatypes'] },
+  { id: 'q4', prompt: 'Which operator accesses members of a pointer to an object?', choices: ['.', '->', '::', '*'], answerIndex: 1, hint: 'Arrow operator (->) for pointer member access.', topic: 'pointers', difficulty: 'medium' },
+  { id: 'q5', prompt: 'What does & do in a variable declaration?', choices: ['Bitwise AND', 'Address of', 'Creates a reference', 'Logical AND'], answerIndex: 2, hint: 'In declarations, & creates a reference variable.', topic: 'references', difficulty: 'medium', relatedTopics: ['pointers'] },
+  { id: 'q6', prompt: 'Default access specifier for class members?', choices: ['public', 'private', 'protected', 'None'], answerIndex: 1, hint: 'Class members are private by default.', topic: 'oop', difficulty: 'easy' },
+  { id: 'q7', prompt: 'Keyword for dynamic memory allocation?', choices: ['malloc', 'new', 'alloc', 'create'], answerIndex: 1, hint: '"new" allocates memory and calls constructor.', topic: 'memory', difficulty: 'medium', relatedTopics: ['pointers'] },
+  { id: 'q8', prompt: 'Correct pointer declaration?', choices: ['int p*;', 'int *p;', '*int p;', 'pointer int p;'], answerIndex: 1, hint: 'Asterisk before variable name: int *p;', topic: 'pointers', difficulty: 'easy' },
+  { id: 'q9', prompt: 'What does endl do?', choices: ['Ends program', 'Newline + flush buffer', 'Ends line only', 'Clears screen'], answerIndex: 1, hint: 'endl inserts newline AND flushes buffer.', topic: 'io', difficulty: 'easy', relatedTopics: ['basics'] },
+  { id: 'q10', prompt: 'Size of int on 64-bit systems?', choices: ['2 bytes', '4 bytes', '8 bytes', 'Depends'], answerIndex: 1, hint: 'int is typically 4 bytes even on 64-bit.', topic: 'datatypes', difficulty: 'medium' },
+  { id: 'q11', prompt: 'Correct for loop syntax?', choices: ['for (i = 0; i < 10; i++)', 'for (int i = 0; i < 10; i++)', 'for i in range(10)', 'foreach (int i in 10)'], answerIndex: 1, hint: 'C++ requires variable declaration in for loop.', topic: 'loops', difficulty: 'easy' },
+  { id: 'q12', prompt: 'What is a constructor?', choices: ['Destroys objects', 'Initializes objects', 'A variable type', 'A loop'], answerIndex: 1, hint: 'Constructors initialize objects on creation.', topic: 'oop', difficulty: 'easy' },
+  { id: 'q13', prompt: 'What does :: do?', choices: ['Compares values', 'Accesses scope', 'Creates pointer', 'Defines function'], answerIndex: 1, hint: ':: accesses namespaces, classes, or global scope.', topic: 'basics', difficulty: 'medium' },
+  { id: 'q14', prompt: 'Pass array to function?', choices: ['void func(int arr[])', 'void func(int[] arr)', 'void func(array int)', 'void func(int arr)'], answerIndex: 0, hint: 'Arrays passed as pointers: int arr[] or int* arr.', topic: 'arrays', difficulty: 'medium', relatedTopics: ['pointers'] },
+  { id: 'q15', prompt: 'What does "virtual" do?', choices: ['Makes constant', 'Enables polymorphism', 'Creates template', 'Declares static'], answerIndex: 1, hint: 'Virtual enables runtime polymorphism.', topic: 'oop', difficulty: 'hard', relatedTopics: ['inheritance'] },
+  { id: 'q16', prompt: 'struct vs class difference?', choices: ['No difference', 'Default access differs', 'struct no functions', 'class no inherit'], answerIndex: 1, hint: 'Only difference is default access specifier.', topic: 'oop', difficulty: 'medium' },
+  { id: 'q17', prompt: 'Delete null pointer?', choices: ['Undefined', 'Crashes', 'Safe (nothing)', 'Compile error'], answerIndex: 2, hint: 'Deleting null pointer is safe.', topic: 'memory', difficulty: 'medium', relatedTopics: ['pointers'] },
+  { id: 'q18', prompt: 'Output of: cout << (5 > 3 ? "Yes" : "No");', choices: ['5 > 3', 'Yes', 'No', 'true'], answerIndex: 1, hint: 'Ternary returns second value if true.', topic: 'operators', difficulty: 'medium' },
+  { id: 'q19', prompt: 'Prevent class inheritance?', choices: ['static', 'const', 'final', 'sealed'], answerIndex: 2, hint: 'C++11 "final" prevents inheritance.', topic: 'oop', difficulty: 'hard', relatedTopics: ['inheritance'] },
+  { id: 'q20', prompt: 'Declare vector of integers?', choices: ['vector int v;', 'int vector v;', 'vector<int> v;', 'vector[int] v;'], answerIndex: 2, hint: 'Vectors use angle brackets: vector<int>.', topic: 'stl', difficulty: 'easy' },
 ]
 
 const DEEP_THINK_QUESTIONS: DeepThinkQuestion[] = [
@@ -113,30 +116,75 @@ function Speedrun() {
   const [streakBroken, setStreakBroken] = useState(false)
   const [previousStreak, setPreviousStreak] = useState(0)
   const [flashAnimation, setFlashAnimation] = useState<'correct' | 'wrong' | null>(null)
+  const [usedQuestionIds, setUsedQuestionIds] = useState<Set<string>>(new Set())
 
   const timerIntervalRef = useRef<number | null>(null)
   const elapsedTimeIntervalRef = useRef<number | null>(null)
 
-  const shuffleArray = <T,>(array: T[]): T[] => {
-    const shuffled = [...array]
-    for (let i = shuffled.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
+  // Adaptive question selection
+  const getNextQuestion = (wrongTopic: string | null, currentStreak: number): Question | DeepThinkQuestion => {
+    if (timeMode === 'deep') {
+      const available = DEEP_THINK_QUESTIONS.filter(q => !usedQuestionIds.has(q.id))
+      // If no unused questions, session is too long - just pick a random one
+      if (available.length === 0) {
+        return DEEP_THINK_QUESTIONS[Math.floor(Math.random() * DEEP_THINK_QUESTIONS.length)]
+      }
+      return available[Math.floor(Math.random() * available.length)]
     }
-    return shuffled
+
+    let candidates: Question[] = []
+    
+    // Priority 1: If user got previous question wrong, show related questions
+    if (wrongTopic) {
+      candidates = MOCK_QUESTIONS.filter(q => 
+        !usedQuestionIds.has(q.id) && 
+        (q.topic === wrongTopic || q.relatedTopics?.includes(wrongTopic))
+      )
+    }
+    
+    // Priority 2: Adjust difficulty based on streak
+    if (candidates.length === 0) {
+      let targetDifficulty: 'easy' | 'medium' | 'hard' = 'easy'
+      if (currentStreak >= 5) targetDifficulty = 'hard'
+      else if (currentStreak >= 3) targetDifficulty = 'medium'
+      
+      candidates = MOCK_QUESTIONS.filter(q => 
+        !usedQuestionIds.has(q.id) && q.difficulty === targetDifficulty
+      )
+    }
+    
+    // Fallback: any unused question
+    if (candidates.length === 0) {
+      candidates = MOCK_QUESTIONS.filter(q => !usedQuestionIds.has(q.id))
+    }
+    
+    // If truly all questions exhausted (session too long), allow repeats
+    if (candidates.length === 0) {
+      candidates = MOCK_QUESTIONS
+    }
+    
+    return candidates[Math.floor(Math.random() * candidates.length)]
   }
 
-  const sessionQuestions = useMemo(() => {
-    if (timeMode === 'deep') {
-      return shuffleArray(DEEP_THINK_QUESTIONS).slice(0, Math.min(sessionState.sessionLength, DEEP_THINK_QUESTIONS.length))
+  const [sessionQuestions, setSessionQuestions] = useState<(Question | DeepThinkQuestion)[]>([])
+
+  // Initialize questions on session start
+  useEffect(() => {
+    if (sessionState.isActive && sessionQuestions.length === 0) {
+      const initial: (Question | DeepThinkQuestion)[] = []
+      for (let i = 0; i < sessionState.sessionLength; i++) {
+        initial.push(getNextQuestion(null, 0))
+      }
+      setSessionQuestions(initial)
     }
-    const shuffled = shuffleArray(MOCK_QUESTIONS)
-    return Array.from({ length: sessionState.sessionLength }, (_, i) => shuffled[i % shuffled.length])
-  }, [sessionState.sessionLength, timeMode])
+  }, [sessionState.isActive, sessionState.sessionLength, timeMode])
 
   const currentQuestion = sessionQuestions[sessionState.currentQuestionIndex]
   const isDeepThink = timeMode === 'deep'
   const currentDeepQuestion = isDeepThink ? (currentQuestion as DeepThinkQuestion) : null
+  
+  // Don't render if no question available yet
+  const hasQuestion = !!currentQuestion
 
   useEffect(() => { setUserStats(getCurrentUserStats()) }, [sessionState.questionsAnswered])
 
@@ -174,6 +222,8 @@ function Speedrun() {
     setTimeLeft(timerDuration)
     setStreakBroken(false)
     setPreviousStreak(0)
+    setUsedQuestionIds(new Set())
+    setSessionQuestions([])
   }
 
   const handleAnswer = async (i: number) => {
@@ -183,6 +233,7 @@ function Speedrun() {
     const isCorrect = i === currentQuestion.answerIndex
     let newStreak = sessionState.currentStreak
     let newCorrect = sessionState.correctAnswersThisSession
+    let wrongTopicForNext: string | null = null
 
     if (isCorrect) {
       newStreak++; newCorrect++
@@ -191,19 +242,42 @@ function Speedrun() {
     } else {
       setFlashAnimation('wrong')
       playFail()
+      // Track wrong topic for adaptive selection - capture NOW for next question
+      wrongTopicForNext = timeMode === 'quick' ? (currentQuestion as Question).topic || null : null
       if (sessionState.currentStreak > 0) { setStreakBroken(true); setPreviousStreak(sessionState.currentStreak); setTimeout(() => setStreakBroken(false), 3000) }
       newStreak = 0
     }
     setTimeout(() => setFlashAnimation(null), 500)
 
+    // Mark question as used FIRST
+    const updatedUsedIds = new Set(usedQuestionIds).add(currentQuestion.id)
+    setUsedQuestionIds(updatedUsedIds)
+    
+    // Generate next question adaptively if not at end
+    if (sessionState.questionsAnswered + 1 < sessionState.sessionLength) {
+      const nextQ = getNextQuestion(wrongTopicForNext, newStreak)
+      setSessionQuestions(prev => {
+        const updated = [...prev]
+        const nextIndex = sessionState.currentQuestionIndex + 1
+        if (nextIndex < updated.length) {
+          updated[nextIndex] = nextQ
+        }
+        return updated
+      })
+    }
+
     setSessionState((prev) => ({
       ...prev, questionsAnswered: prev.questionsAnswered + 1, correctAnswersThisSession: newCorrect,
       currentStreak: newStreak, bestStreakThisSession: Math.max(prev.bestStreakThisSession, newStreak),
     }))
-    await recordAnswer(isCorrect, newStreak)
+    await recordAnswer(isCorrect, newStreak, isCorrect ? xpPerQuestion : 0)
 
     if (sessionState.questionsAnswered + 1 >= sessionState.sessionLength) {
-      setTimeout(() => { setShowSummary(true); setSessionState((prev) => ({ ...prev, isActive: false })) }, 2000)
+      setTimeout(() => {
+        playCelebration()
+        setShowSummary(true)
+        setSessionState((prev) => ({ ...prev, isActive: false }))
+      }, 2000)
     }
   }
 
@@ -213,7 +287,7 @@ function Speedrun() {
     setFlashAnimation('wrong'); playFail()
     if (sessionState.currentStreak > 0) { setStreakBroken(true); setPreviousStreak(sessionState.currentStreak); setTimeout(() => setStreakBroken(false), 3000) }
     setSessionState((prev) => ({ ...prev, questionsAnswered: prev.questionsAnswered + 1, currentStreak: 0 }))
-    await recordAnswer(false, 0)
+    await recordAnswer(false, 0, 0)
     setTimeout(() => setFlashAnimation(null), 500)
     if (sessionState.questionsAnswered + 1 >= sessionState.sessionLength) {
       setTimeout(() => { setShowSummary(true); setSessionState((prev) => ({ ...prev, isActive: false })) }, 2000)
@@ -236,6 +310,7 @@ function Speedrun() {
   const resetSession = () => {
     setSessionStarted(false); setShowSummary(false); setShowExitConfirm(false); setSelected(null); setLocked(false)
     setSessionState({ currentQuestionIndex: 0, questionsAnswered: 0, correctAnswersThisSession: 0, currentStreak: 0, bestStreakThisSession: 0, sessionLength: 20, startTime: 0, elapsedTime: 0, isActive: false })
+    setUsedQuestionIds(new Set()); setSessionQuestions([])
     if (timerIntervalRef.current) clearInterval(timerIntervalRef.current)
     if (elapsedTimeIntervalRef.current) clearInterval(elapsedTimeIntervalRef.current)
   }
@@ -243,6 +318,18 @@ function Speedrun() {
   const progress = sessionState.sessionLength ? (sessionState.questionsAnswered / sessionState.sessionLength) * 100 : 0
   const sessionAccuracy = sessionState.questionsAnswered ? Math.round((sessionState.correctAnswersThisSession / sessionState.questionsAnswered) * 100) : 0
   const formatTime = (sec: number) => `${Math.floor(sec / 60)}:${(sec % 60).toString().padStart(2, '0')}`
+
+  // If session active but no question, show loading
+  if (sessionState.isActive && !hasQuestion) {
+    return (
+      <div style={{ height: 'calc(100vh - 80px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: '48px', marginBottom: '16px' }}>⏳</div>
+          <h2 style={{ color: c.text, fontSize: '20px' }}>Loading questions...</h2>
+        </div>
+      </div>
+    )
+  }
 
   // Styles
   const s: Record<string, CSSProperties> = {

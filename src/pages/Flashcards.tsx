@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import type { CSSProperties } from 'react'
 import { recordAnswer } from '../lib/stats.ts'
-import { playSuccess, playFail, playStreak } from '../lib/sounds.ts'
+import { playSuccess, playFail, playStreak, playCelebration } from '../lib/sounds.ts'
 
 type Flashcard = {
   id: string
@@ -232,7 +232,7 @@ function Flashcards() {
       playFail()
       setStreak(0)
     }
-    await recordAnswer(isCorrect, streak)
+    await recordAnswer(isCorrect, streak, isCorrect ? 2 : 0)
     setReviewedCount((prev) => prev + 1)
     setTimeout(() => {
       if (currentIndex < cardsDue.length - 1) {
@@ -240,6 +240,7 @@ function Flashcards() {
         setShowResult(false)
         setSelectedAnswer(null)
       } else {
+        playCelebration()
         setShowStats(true)
       }
     }, 1500)
@@ -251,7 +252,7 @@ function Flashcards() {
     const newProgress = updateCardProgress(currentCard.id, quality, currentCard)
     progressRef.current.set(currentCard.id, newProgress)
     saveCardProgress(progressRef.current)
-    await recordAnswer(isCorrect, isCorrect ? correctCount + 1 : 0)
+    await recordAnswer(isCorrect, isCorrect ? correctCount + 1 : 0, isCorrect ? 5 : 0)
     if (isCorrect) setCorrectCount((prev) => prev + 1)
     setReviewedCount((prev) => prev + 1)
     setIsFlipped(false)

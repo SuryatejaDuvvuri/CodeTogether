@@ -47,7 +47,7 @@ function Lobby() {
 
   const rooms = useMemo(() => allRooms.filter(room => (presenceMap[room.id] ?? 0) > 0), [allRooms, presenceMap])
   const totalOnline = useMemo(() => Object.values(presenceMap).reduce((sum, count) => sum + count, 0), [presenceMap])
-  const dailyXP = Math.min(userStats.correctAnswers * 10, 100)
+  const totalXP = userStats.xp || 0
 
   // Responsive layout
   const [isWide, setIsWide] = useState(window.innerWidth >= 900)
@@ -58,9 +58,36 @@ function Lobby() {
   }, [])
 
   useEffect(() => {
-    const interval = setInterval(() => setUserStats(getCurrentUserStats()), 3000)
-    return () => clearInterval(interval)
-  }, [])
+    if (!rtdbEnabled || !db) {
+      const interval = setInterval(() => setUserStats(getCurrentUserStats()), 3000)
+      return () => clearInterval(interval)
+    }
+    
+    // Fetch stats from Firebase in real-time
+    const statsRef = ref(db, `stats/${identity.id}`)
+    const unsub = onValue(statsRef, (snapshot) => {
+      const val = snapshot.val()
+      if (val) {
+        setUserStats({
+          name: val.name || identity.name,
+          xp: val.xp || 0,
+          accuracy: val.accuracy || 0,
+          streak: val.streak || 0,
+          collaboration: val.collaboration || 0,
+          consistency: val.consistency || 0,
+          totalQuestions: val.totalQuestions || 0,
+          correctAnswers: val.correctAnswers || 0,
+          codeEdits: val.codeEdits || 0,
+          chatMessages: val.chatMessages || 0,
+          activeTime: val.activeTime || 0,
+          lastUpdated: val.lastUpdated,
+        })
+      } else {
+        setUserStats(getCurrentUserStats())
+      }
+    })
+    return () => unsub()
+  }, [identity.id])
 
   useEffect(() => {
     if (!rtdbEnabled || !db) return
@@ -387,9 +414,9 @@ function Lobby() {
           </div>
           <div style={{ ...s.statBox, backgroundColor: 'rgba(168, 85, 247, 0.1)', border: '1px solid rgba(168, 85, 247, 0.2)' }}>
             <div style={{ ...s.statValue, color: c.purple }}>
-              <span>✨</span> {dailyXP}/100
+              <span>✨</span> {totalXP}
             </div>
-            <div style={s.statLabel}>Today's XP</div>
+            <div style={s.statLabel}>Total XP</div>
           </div>
           <div style={{ ...s.statBox, backgroundColor: 'rgba(34, 197, 94, 0.1)', border: '1px solid rgba(34, 197, 94, 0.2)' }}>
             <div style={{ ...s.statValue, color: c.green }}>
