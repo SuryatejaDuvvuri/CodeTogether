@@ -609,8 +609,25 @@ function Arena() {
       let fixes: { name: string; fixed: boolean; hint: string }[] = []
       
       if (selectedChallenge === 'fix-the-bug') {
-        // Check if i <= size was changed to i < size
-        const sumArrayFixed = currentLines.some(l => l.includes('i < size') && l.includes('for') && !l.includes('<='))
+        // Check if i <= size was changed to i < size in sumArray function specifically
+        // Find the sumArray function and check its for loop
+        let sumArrayFixed = false
+        for (let i = 0; i < currentLines.length; i++) {
+          const line = currentLines[i]
+          // If we're in sumArray function (look for the line with "int sum = 0;")
+          if (line.includes('int sum = 0')) {
+            // Check the next few lines for the for loop
+            for (let j = i; j < Math.min(i + 3, currentLines.length); j++) {
+              const forLine = currentLines[j]
+              if (forLine.includes('for') && forLine.includes('i') && forLine.includes('size')) {
+                // Must have "i < size" and NOT have "<="
+                sumArrayFixed = forLine.includes('i < size') && !forLine.includes('<=')
+                break
+              }
+            }
+            break
+          }
+        }
         fixes.push({ name: 'sumArray loop bound', fixed: sumArrayFixed, hint: 'Change i <= size to i < size (off-by-one error)' })
         
         // Check if swap uses references
@@ -1075,7 +1092,7 @@ function Arena() {
               {myRegion && <span style={{ ...s.badge, backgroundColor: `${getRegionColor(myRegion)}20`, color: getRegionColor(myRegion) }}>Region {myRegion}</span>}
               {saveStatus === 'saved' && <span style={{ fontSize: '10px', color: c.green }}>✓</span>}
             </div>
-            <button onClick={submitCode} disabled={isSubmitting} style={{ ...s.btn, backgroundColor: isSubmitting ? c.border : c.green, color: isSubmitting ? c.textDim : '#fff', cursor: isSubmitting ? 'not-allowed' : 'pointer' }}>
+            <button onClick={submitCode} disabled={!canSubmit} style={{ ...s.btn, backgroundColor: !canSubmit ? c.border : c.green, color: !canSubmit ? c.textDim : '#fff', cursor: !canSubmit ? 'not-allowed' : 'pointer' }}>
               {isSubmitting ? '...' : '📤 Submit'}
             </button>
           </div>
