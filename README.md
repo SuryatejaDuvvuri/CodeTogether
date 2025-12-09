@@ -7,7 +7,7 @@ CodeTogether gamifies learning through team challenges, adaptive quizzes, and in
 
 ---
 
-
+Click to watch the Demo
 [![Demo Video](https://github.com/user-attachments/assets/a11cd862-28f1-469d-87f2-db69a6f65bcd)](https://youtu.be/vt5fpE0bzSY)
 
 ## ✨ Features
