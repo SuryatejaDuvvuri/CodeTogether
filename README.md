@@ -189,7 +189,7 @@ The system automatically tracks active time in Arena sessions:
 ## 🛠️ Tech Stack
 
 - **Frontend**: React + TypeScript + Vite
-- **Real-time Collaboration**: Yjs + WebRTC
+- **Real-time Collaboration**: Yjs 
 - **Backend**: Firebase Realtime Database
 - **Code Editor**: Monaco Editor
 - **Styling**: Tailwind CSS v4 (PostCSS)
@@ -252,7 +252,7 @@ In Arena mode, code is divided into regions (A, B, C, D):
 
 ### Real-time Collaboration
 
-Using Yjs and WebRTC for peer-to-peer synchronization:
+Using Yjs for peer-to-peer synchronization:
 - **Code sync**: Changes propagate instantly
 - **Presence tracking**: See who's online
 - **Chat system**: Communicate with teammates
